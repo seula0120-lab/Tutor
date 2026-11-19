@@ -9,6 +9,13 @@ import random
 
 from .notice import tax_notes, tax_notice
 
+NO_EXPLANATION = "공식 해설 없음"
+
+
+def explanation_of(row):
+    """화면에 보일 해설. 원본 해설이 비어 있으면 지어내지 않고 '공식 해설 없음' 으로 알린다."""
+    return (row["explanation"] or "").strip() or NO_EXPLANATION
+
 
 def accepted_answers(answer):
     """'3' 또는 복수정답 '1,3' 을 {'1', '3'} 집합으로 바꾼다."""
@@ -66,7 +73,7 @@ def check_answer(conn, question_id, choice):
         return {"error": f"문항 {question_id} 없음"}
     if str(choice).strip() not in accepted_answers(row["answer"]):
         return {"id": question_id, "correct": False}
-    return {"id": question_id, "correct": True, "answer": row["answer"], "explanation": row["explanation"]}
+    return {"id": question_id, "correct": True, "answer": row["answer"], "explanation": explanation_of(row)}
 
 
 def reveal(conn, question_id):
@@ -74,7 +81,7 @@ def reveal(conn, question_id):
     row = get_row(conn, question_id)
     if row is None:
         return {"error": f"문항 {question_id} 없음"}
-    return {"id": question_id, "answer": row["answer"], "explanation": row["explanation"]}
+    return {"id": question_id, "answer": row["answer"], "explanation": explanation_of(row)}
 
 
 def pick_set(conn, subject=None, tax=None, unit=None, count=5, rng=random):

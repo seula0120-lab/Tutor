@@ -10,7 +10,7 @@ import random
 import time
 
 from . import records
-from .quiz import accepted_answers, get_row, public_question
+from .quiz import accepted_answers, explanation_of, get_row, public_question
 
 SUBJECTS = ("재무회계", "원가회계", "세무회계")
 PER_SUBJECT = 5
@@ -71,7 +71,7 @@ def grade(conn, ids, answers, *, now=None):
             by_subject[row["subject"]]["score"] += row["points"]
         else:
             wrong.append({"id": row["id"], "subject": row["subject"], "unit": row["unit"], "question": row["question"],
-                          "your_choice": choice, "answer": row["answer"], "explanation": row["explanation"]})
+                          "your_choice": choice, "answer": row["answer"], "explanation": explanation_of(row)})
         records.save(conn, row["id"], choice, correct, source="mock", now=now)
     score = sum(v["score"] for v in by_subject.values())
     max_score = sum(v["max"] for v in by_subject.values())

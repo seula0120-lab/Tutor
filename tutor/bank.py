@@ -6,19 +6,22 @@
 import json
 from pathlib import Path
 
+from .corrections import CORRECTIONS_PATH, apply_corrections, load_corrections
 from .tagging import tag_question
 
 BANK_DIR = Path(__file__).resolve().parent.parent / "data" / "bank"
 
 
-def read_bank_files(bank_dir=BANK_DIR):
-    """회차 번호 순으로 정렬한 (회차, 이론 문항 목록) 을 돌려준다."""
+def read_bank_files(bank_dir=BANK_DIR, corrections_path=CORRECTIONS_PATH):
+    """회차 번호 순으로 정렬한 (회차, 이론 문항 목록) 을 돌려준다. data/corrections.json 의 정정이 적용된다.
+
+    sync_raw 와 load_db 가 모두 이 함수로 읽으므로 적재할 때마다 정정이 반영된다."""
     files = sorted(Path(bank_dir).glob("*.json"), key=lambda p: int(p.stem))
     rounds = []
     for path in files:
         data = json.loads(path.read_text(encoding="utf-8"))
         rounds.append((int(data["round"]), data.get("theory", [])))
-    return rounds
+    return apply_corrections(rounds, load_corrections(corrections_path))
 
 
 def question_row(round_no, item):

@@ -7,7 +7,7 @@
 """
 import json
 
-from .quiz import public_question
+from .quiz import explanation_of, public_question
 from .toc import SUBJECT_ORDER
 
 EXPORT_NAME = "회계튜터_목차.html"
@@ -26,7 +26,7 @@ def export_data(conn):
     for row in rows:
         q = public_question(row)
         q["answer"] = row["answer"]
-        q["explanation"] = row["explanation"]
+        q["explanation"] = explanation_of(row)
         grouped.setdefault(q["subject"], {}).setdefault((q["tax"], q["unit"]), []).append(q)
     subjects = sorted(grouped, key=lambda s: (SUBJECT_ORDER.index(s) if s in SUBJECT_ORDER else 99, s))
     return [{"subject": s, "units": [{"label": " › ".join(p for p in key if p), "questions": items}
