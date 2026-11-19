@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import quiz
+from . import quiz, records
 from .ai import explain
 from .analysis import unit_profile
 from .db import connect
@@ -20,6 +20,8 @@ from .sync import format_report, sync_raw
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
+# 주소 → (static 폴더의 파일, 내용 종류). 이 목록에 있는 파일만 내보낸다.
+STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8")}
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
@@ -81,13 +83,20 @@ def dispatch(method, path, params, body, conn):
             if path == "/api/units":
                 return 200, {"units": quiz.list_units(conn)}
             if path == "/api/question":
-                found = quiz.find_question(conn, params["round"], params["number"])
+                if params.get("id"):             # id('128-12')로도 찾는다
+                    row = quiz.get_row(conn, params["id"])
+                    found = quiz.public_question(row) if row else None
+                else:
+                    found = quiz.find_question(conn, params["round"], params["number"])
                 return (200, found) if found else (404, {"error": "해당 회차·번호의 문항이 없습니다."})
             if path == "/api/quiz":
                 exclude = [x for x in (params.get("exclude") or "").split(",") if x]
                 picked = quiz.pick_quiz_question(conn, params.get("subject"), params.get("tax"),
                                                  params.get("unit"), exclude)
                 return (200, picked) if picked else (404, {"error": "조건에 맞는 문항이 없습니다."})
+            if path == "/api/notebook":
+                return 200, {"items": records.notebook(conn, params.get("subject"), params.get("unit")),
+                             "unit_counts": records.unit_wrong_counts(conn)}
             if path == "/api/annotated":
                 return api_annotated(conn, params)
             if path == "/api/glossary":
@@ -95,9 +104,13 @@ def dispatch(method, path, params, body, conn):
         if method == "POST":
             if path == "/api/answer":
                 result = quiz.check_answer(conn, body.get("id", ""), body.get("choice", ""))
+                if "error" not in result:       # 보기를 고르면 풀이 기록을 남긴다(같은 기록 연타는 한 번만)
+                    records.save(conn, result["id"], body.get("choice", ""), result["correct"])
                 return (404 if "error" in result else 200), result
             if path == "/api/reveal":
                 result = quiz.reveal(conn, body.get("id", ""))
+                if "error" not in result:       # 확인만 함: 정답으로 세지 않는다
+                    records.save(conn, result["id"], "", None, seen_only=True)
                 return (404 if "error" in result else 200), result
             if path == "/api/ask":
                 return api_ask(conn, body)
@@ -113,6 +126,8 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path in ("/", "/index.html"):
             return self._send_bytes(200, (STATIC_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
+        if url.path in STATIC_FILES:
+            return self._send_bytes(200, (STATIC_DIR / STATIC_FILES[url.path][0]).read_bytes(), STATIC_FILES[url.path][1])
         params = {k: v[0] for k, v in parse_qs(url.query).items()}
         self._reply("GET", url.path, params, {})
 

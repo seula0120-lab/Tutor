@@ -67,6 +67,7 @@
   <button class="tab active" data-tab="analysis">문제 분석</button>
   <button class="tab" data-tab="answers">기출 답안</button>
   <button class="tab" data-tab="words">단어 주석</button>
+  <button class="tab" data-tab="notebook">오답노트</button>
 </div>
 
 <div id="analysis" class="panel active">
@@ -105,22 +106,21 @@
   <div id="gList" style="margin-top:6px"></div>
 </div>
 
-<script>
-// ---- 작은 도우미 ----
-const $ = (id) => document.getElementById(id);
-function el(tag, props = {}, ...children) {
-  const node = document.createElement(tag);
-  Object.assign(node, props);
-  for (const c of children) node.append(c);
-  return node;
-}
-async function api(path, body) {
-  const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
-  const response = await fetch(path, options);
-  return { ok: response.ok, data: await response.json() };
-}
-const query = (obj) => new URLSearchParams(Object.entries(obj).filter(([, v]) => v !== "" && v != null)).toString();
+<div id="notebook" class="panel">
+  <div class="row" style="margin-top:0">
+    <b>틀린 문항</b>
+    <select id="nbSubject"><option value="">전체 과목</option><option>재무회계</option><option>원가회계</option><option>세무회계</option></select>
+    <select id="nbUnit"><option value="">전체 단원</option></select>
+    <span id="nbInfo" class="small"></span>
+  </div>
+  <div id="nbList" style="margin-top:8px"></div>
+  <div id="nbCard" style="margin-top:12px"></div>
+  <h3 style="font-size:14px">단원별 틀린 횟수</h3>
+  <table id="nbCounts"></table>
+</div>
 
+<script src="/static/quizcard.js"></script>
+<script>
 // ---- 탭 ----
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
@@ -219,44 +219,10 @@ $("anScope").addEventListener("change", loadAnalysis);
 
 // ---- 기출 답안 탭 ----
 let solved = [];
-function renderCard(q) {
-  const card = $("card");
-  card.replaceChildren();
-  card.append(el("div", { className: "meta", textContent: `${q.id} (${q.round}회 ${q.number}번) · ${[q.subject, q.tax, q.unit].filter(Boolean).join(" › ")} · ${q.points}점` }),
-              el("div", { style: "margin:6px 0;font-weight:600", textContent: q.question }));
-  if (q.tax_notice) card.append(el("span", { className: "taxflag", textContent: q.tax_notice }));
-  if (q.multi) card.append(el("div", { className: "notice", textContent: "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다." }));
-  const result = el("div");
-  const buttons = q.choices.map((text, i) => {
-    const b = el("button", { className: "choice", textContent: `${["①", "②", "③", "④"][i] || i + 1} ${text}` });
-    b.addEventListener("click", async () => {
-      const { data } = await api("/api/answer", { id: q.id, choice: String(i + 1) });
-      if (data.correct) {
-        b.classList.add("right");
-        buttons.forEach((x) => (x.disabled = true));
-        result.replaceChildren(el("div", { className: "result-right", textContent: `정답입니다. (정답 ${data.answer}번)` }),
-                               el("div", { className: "explain", textContent: data.explanation }));
-      } else {
-        b.classList.add("wrong");
-        buttons.forEach((x) => (x.disabled = true));      // 오답이면 보기를 모두 잠근다(재시도 없음)
-        result.replaceChildren(el("div", { className: "result-wrong", textContent: "오답입니다." }));
-      }
-    });
-    return b;
-  });
-  const reveal = el("button", { className: "ghost", textContent: "정답·해설 바로 보기" });
-  reveal.addEventListener("click", async () => {
-    const { data } = await api("/api/reveal", { id: q.id });
-    buttons.forEach((x) => (x.disabled = true));
-    result.replaceChildren(el("div", { className: "result-right", textContent: `정답 ${data.answer}번 (풀이 기록 없이 공개)` }),
-                           el("div", { className: "explain", textContent: data.explanation }));
-  });
-  card.append(...buttons, el("div", { className: "row" }, reveal), result);
-}
 async function loadQuestion(round, number) {
   const { ok, data } = await api("/api/question?" + query({ round, number }));
   if (!ok) { $("card").replaceChildren(el("div", { className: "result-wrong", textContent: data.error })); return; }
-  renderCard(data);
+  renderCard(data, $("card"));
 }
 $("lkGo").addEventListener("click", () => loadQuestion($("lkRound").value, $("lkNumber").value));
 $("quizGo").addEventListener("click", async () => {
@@ -264,12 +230,14 @@ $("quizGo").addEventListener("click", async () => {
   const { ok, data } = await api("/api/quiz?" + query({ subject, tax, unit, exclude: solved.join(",") }));
   if (!ok) { solved = []; $("card").replaceChildren(el("div", { className: "notice", textContent: data.error + " (푼 문제 목록을 비웠습니다. 다시 눌러 주세요.)" })); return; }
   solved.push(data.id);
-  renderCard(data);
+  renderCard(data, $("card"));
 });
 async function loadUnits() {
   const { data } = await api("/api/units");
   $("quizUnit").replaceChildren(el("option", { value: "||", textContent: "전체 단원" }),
     ...data.units.map((u) => el("option", { value: `${u.subject}|${u.tax}|${u.unit}`, textContent: `${u.label} (${u.count})` })));
+  const names = [...new Set(data.units.map((u) => u.unit))].sort();
+  $("nbUnit").replaceChildren(el("option", { value: "", textContent: "전체 단원" }), ...names.map((n) => el("option", { value: n, textContent: n })));
 }
 
 // ---- 단어 주석 탭 ----
@@ -301,6 +269,31 @@ async function loadGlossary() {
   $("gList").replaceChildren(...data.terms.map((t) => el("div", { className: "hit" }, el("b", { textContent: t.term }), " — " + t.meaning)));
 }
 $("gq").addEventListener("input", loadGlossary);
+
+// ---- 오답노트 탭 ----
+async function loadNotebook() {
+  const { data } = await api("/api/notebook?" + query({ subject: $("nbSubject").value, unit: $("nbUnit").value }));
+  $("nbInfo").textContent = `오답노트에 남은 문항 ${data.items.length}개 (다시 풀어 맞히면 빠집니다)`;
+  const list = $("nbList");
+  list.replaceChildren(...(data.items.length ? data.items.map((it) => {
+    const row = el("div", { className: "hit" }, el("span", { className: "meta", textContent: `${it.id} · ${[it.subject, it.tax, it.unit].filter(Boolean).join(" › ")} · 틀린 횟수 ${it.wrong_count}` }),
+                    el("div", { textContent: it.first_line }));
+    const again = el("button", { className: "ghost", textContent: "다시 풀기" });
+    again.style.marginTop = "4px";
+    again.addEventListener("click", async () => {
+      const { ok, data: q } = await api("/api/question?" + query({ id: it.id }));
+      if (ok) renderCard(q, $("nbCard"), ({ kind }) => { if (kind === "correct") loadNotebook(); });
+    });
+    row.append(again);
+    return row;
+  }) : [el("div", { className: "small", textContent: "오답노트가 비어 있습니다." })]));
+  const table = $("nbCounts");
+  table.replaceChildren(el("tr", {}, ...["단원", "틀린 횟수(누적)", "아직 남은 문항"].map((h) => el("th", { textContent: h }))));
+  for (const r of data.unit_counts) table.append(el("tr", {}, el("td", { textContent: r.label }), el("td", { className: "num", textContent: r.wrong_total }), el("td", { className: "num", textContent: r.open_questions })));
+}
+$("nbSubject").addEventListener("change", loadNotebook);
+$("nbUnit").addEventListener("change", loadNotebook);
+document.querySelector('.tab[data-tab="notebook"]').addEventListener("click", loadNotebook);
 
 loadAnalysis(); loadUnits(); loadGlossary();
 </script>

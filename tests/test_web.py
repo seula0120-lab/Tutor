@@ -164,9 +164,12 @@ def test_ask_returns_summary_card_without_api_key(conn):
 
 
 def test_quiz_page_locks_choices_after_wrong_answer():
-    page = (ROOT_PAGE).read_text(encoding="utf-8")
-    assert "다시 골라" not in page                                   # 재시도 안내 문구 삭제
-    wrong_branch = page[page.index('b.classList.add("wrong")'):][:260]
-    assert "buttons.forEach((x) => (x.disabled = true))" in wrong_branch
-    assert "정답·해설 바로 보기" in page                              # 바로 보기 버튼은 그대로
+    # 퀴즈 카드 코드는 공용 static/quizcard.js 로 옮겼다(같은 검사를 그 파일에 한다).
+    page = ROOT_PAGE.read_text(encoding="utf-8")
+    card = (ROOT_PAGE.parent / "quizcard.js").read_text(encoding="utf-8")
+    assert "다시 골라" not in page + card                            # 재시도 안내 문구 없음
+    wrong_branch = card[card.index('b.classList.add("wrong")'):][:260]
+    assert "오답입니다." in wrong_branch
+    assert "buttons.forEach((x) => (x.disabled = true))" in card[:card.index('b.classList.add("wrong")')]   # 클릭 즉시 모두 잠금
+    assert "정답·해설 바로 보기" in card
     assert "이 주제를 직접 다룬 기출을 찾지 못했습니다" in page
