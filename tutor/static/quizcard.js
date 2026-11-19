@@ -26,7 +26,29 @@ const TABS = [["ask", "질문"], ["answers", "기출 답안"], ["notebook", "오
 function renderTopbar(active) {
   const links = TABS.map(([name, label]) => el("a", { className: "tab-link" + (name === active ? " active" : ""), href: name === "toc" ? "/toc" : `/#${name}`, textContent: label }));
   return el("header", { className: "topbar" }, el("div", { className: "topbar-inner" },
-    el("a", { className: "brand", href: "/", textContent: "회계튜터" }, el("small", { textContent: " 전산세무 1급 이론" })), el("nav", { className: "tabs", ariaLabel: "화면 이동" }, ...links)));
+    el("a", { className: "brand", href: "/", textContent: "회계튜터" }, el("small", { textContent: " 전산세무 1급 이론" })), el("div", { className: "tabs-wrap" }, el("nav", { className: "tabs", ariaLabel: "화면 이동" }, ...links))));
+}
+// 탭 줄이 가로로 넘칠 때: 현재 탭을 보이는 가운데로 스크롤하고, 오른쪽에 더 있으면 가장자리를 옅게 가린다(.more).
+function scrollTabIntoView(nav) {
+  const active = nav && nav.querySelector(".active");
+  if (!active) return;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  nav.scrollTo({ left: Math.max(0, active.offsetLeft - (nav.clientWidth - active.offsetWidth) / 2), behavior: reduce ? "auto" : "smooth" });
+}
+function watchTabOverflow(nav) {
+  const wrap = nav.parentElement;
+  const update = () => wrap.classList.toggle("more", nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+  nav.addEventListener("scroll", update, { passive: true });
+  addEventListener("resize", update);
+  update();
+}
+
+// #topbar 자리에 상단 바를 넣고 탭 줄 동작(현재 탭 보이기·오른쪽 그라데이션)을 연결한다. 홈 이외의 화면용.
+function mountTopbar(active) {
+  $("topbar").replaceWith(renderTopbar(active));
+  const nav = document.querySelector(".tabs");
+  watchTabOverflow(nav);
+  scrollTabIntoView(nav);
 }
 
 // 글 속의 핵심어를 형광펜(<mark>)으로 칠한 조각들을 돌려준다. 긴 핵심어부터 찾고 겹치는 곳은 칠하지 않는다.

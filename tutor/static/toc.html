@@ -15,7 +15,7 @@
 </main>
 <script src="/static/quizcard.js"></script>
 <script>
-$("topbar").replaceWith(renderTopbar("toc"));
+mountTopbar("toc");
 (async () => {
   const { data } = await api("/api/toc");
   const root = $("toc");

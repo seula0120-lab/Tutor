@@ -332,6 +332,24 @@ async function main() {
     await page.viewport(1100, 900, false);
   });
 
+  await scenario("모바일 탭 줄: 오른쪽 그라데이션·현재 탭 자동 스크롤", async () => {
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/");
+    const more = () => page.evaluate(`document.querySelector('.tabs-wrap').classList.contains('more')`);
+    await page.waitFor(`document.querySelector('.tabs').scrollWidth > document.querySelector('.tabs').clientWidth`, "탭 줄이 가로로 넘침");
+    assert(await more(), "처음에는 오른쪽에 더 있다는 그라데이션이 켜져야 함");
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tabs-wrap'), '::after').backgroundImage`)).includes("linear-gradient"), "그라데이션 없음");
+    await tab("words");
+    const visible = `(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab.active').getBoundingClientRect(); return a.left >= n.left - 1 && a.right <= n.right + 1; })()`;
+    await page.waitFor(visible, "현재 탭(단어 주석)이 보이도록 스크롤");
+    await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more') || document.querySelector('.tabs').scrollLeft > 0`, "스크롤 후 상태 갱신");
+    await page.goto(base + "/toc");                                       // 목차 화면: 목차 탭이 활성이고 보여야 한다
+    await page.waitFor(`(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab-link.active').getBoundingClientRect(); return a.right <= n.right + 1 && a.left >= n.left - 1; })()`, "목차 탭이 보임");
+    await page.goto(base + "/#mock");
+    await page.waitFor(`document.querySelector('.tab.active').dataset.tab === 'mock'`, "해시 링크로 모의고사 탭 열림");
+    await page.viewport(1100, 900, false);
+  });
+
   const designFiles = [];
   const screens = {
     "질문-요약카드": async () => { await page.goto(base + "/"); await page.evaluate(`document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`); await page.waitFor(`document.querySelector('#answer .card mark')`, "요약 카드"); },

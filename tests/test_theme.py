@@ -54,3 +54,15 @@ def test_offline_export_inlines_theme_without_font_files(conn):
     html = render_html(conn)
     assert "--accent: #4F46E5" in html and "@font-face" not in html and "/static/" not in html
     assert "@font-face" not in inline_theme()
+
+
+def test_tab_row_overflow_hint_and_hash_links_are_wired():
+    js = (STATIC_DIR / "quizcard.js").read_text(encoding="utf-8")
+    index = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assert ".tabs-wrap.more::after" in THEME and "linear-gradient(to right, transparent" in THEME
+    assert "scrollTabIntoView" in js and "watchTabOverflow" in js and "mountTopbar" in js
+    # 해시 링크 처리는 스크립트 맨 아래(최상위)에서 실행돼야 한다: 다른 이벤트 처리기 안에 들어가면 /#answers 링크가 동작하지 않는다
+    tail = index.split("loadFavorites();\n")[-1]
+    assert "tabFromHash();" in tail and 'addEventListener("hashchange"' in tail
+    for page in ("toc.html", "glossary_review.html"):
+        assert "mountTopbar(" in (STATIC_DIR / page).read_text(encoding="utf-8")

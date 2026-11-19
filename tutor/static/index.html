@@ -9,7 +9,7 @@
 <body>
 <header class="topbar"><div class="topbar-inner">
   <a class="brand" href="/">회계튜터<small>전산세무 1급 이론</small></a>
-  <nav class="tabs" aria-label="화면 이동">
+  <div class="tabs-wrap"><nav class="tabs" aria-label="화면 이동">
     <button class="tab active" data-tab="ask">질문</button>
     <button class="tab" data-tab="answers">기출 답안</button>
     <button class="tab" data-tab="notebook">오답노트</button>
@@ -17,7 +17,7 @@
     <button class="tab" data-tab="analysis">문제 분석</button>
     <button class="tab" data-tab="words">단어 주석</button>
     <a class="tab-link" href="/toc">목차</a>
-  </nav>
+  </nav></div>
 </div></header>
 <main>
 <div id="ask-panel" class="panel active">
@@ -108,7 +108,9 @@ document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click",
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.tab || p.id === tab.dataset.tab + "-panel"));
   history.replaceState(null, "", "#" + tab.dataset.tab);
+  revealActiveTab();
 }));
+function revealActiveTab() { const nav = document.querySelector(".tabs"); scrollTabIntoView(nav); }
 function showTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
 
 // ---- 질문창 ----
@@ -254,10 +256,7 @@ async function loadAnalysis() {
       el("td", { className: "num", textContent: r.points_per_round })));
   }
 }
-$("anScope").addEventListener("change", () => { function tabFromHash() { if (document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`)) showTab(location.hash.slice(1)); }   // 다른 화면의 탭 링크(/#answers 등)
-tabFromHash();
-window.addEventListener("hashchange", tabFromHash);
-loadAnalysis(); loadStudyOrder(); });
+$("anScope").addEventListener("change", () => { loadAnalysis(); loadStudyOrder(); });
 
 async function loadStudyOrder() {
   const { data } = await api("/api/study_order?" + query({ scope: $("anScope").value }));
@@ -429,6 +428,11 @@ async function loadMockHistory(known) {
 document.querySelector('.tab[data-tab="mock"]').addEventListener("click", () => loadMockHistory());
 
 loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); renderRecent(); loadFavorites();
+function tabFromHash() { if (document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`)) showTab(location.hash.slice(1)); }   // 다른 화면의 탭 링크(/#answers 등)
+tabFromHash();
+window.addEventListener("hashchange", tabFromHash);
+watchTabOverflow(document.querySelector(".tabs"));
+revealActiveTab();
 </script>
 </body>
 </html>
