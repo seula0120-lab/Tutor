@@ -37,6 +37,7 @@
   .meaning { background: #fff6d6; border-radius: 6px; padding: 8px 10px; margin-top: 8px; display: none; }
   .ai { background: #f6f1ff; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin-top: 8px; }
   .small { font-size: 12px; color: #5b6577; }
+  .choice.picked { background: #e3ecff; border-color: #2b5fd9; }
   .card { border: 2px solid #2b5fd9; border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #f7faff; }
   .card h3 { margin: 8px 0 4px; font-size: 14px; }
   .card ul { margin: 2px 0 6px; padding-left: 20px; }
@@ -68,6 +69,7 @@
   <button class="tab" data-tab="answers">기출 답안</button>
   <button class="tab" data-tab="words">단어 주석</button>
   <button class="tab" data-tab="notebook">오답노트</button>
+  <button class="tab" data-tab="mock">모의고사</button>
 </div>
 
 <div id="analysis" class="panel active">
@@ -117,6 +119,16 @@
   <div id="nbCard" style="margin-top:12px"></div>
   <h3 style="font-size:14px">단원별 틀린 횟수</h3>
   <table id="nbCounts"></table>
+</div>
+
+<div id="mock" class="panel">
+  <div class="row" style="margin-top:0">
+    <button id="mockStart">모의고사 시작</button>
+    <span class="small">재무 5 · 원가 5 · 세무 5문항(부가세·소득세·법인세 섞음), 문항당 2점 · 30점 만점. 제출 전에는 정답을 보여 주지 않습니다. 이미 맞힌 문항은 뒤로 미룹니다.</span>
+  </div>
+  <div id="mockBody" style="margin-top:10px"></div>
+  <h3 style="font-size:14px">지난 점수 추이</h3>
+  <table id="mockHistory"></table>
 </div>
 
 <script src="/static/quizcard.js"></script>
@@ -294,6 +306,64 @@ async function loadNotebook() {
 $("nbSubject").addEventListener("change", loadNotebook);
 $("nbUnit").addEventListener("change", loadNotebook);
 document.querySelector('.tab[data-tab="notebook"]').addEventListener("click", loadNotebook);
+
+// ---- 모의고사 탭 ----
+let mockAnswers = {};
+$("mockStart").addEventListener("click", async () => {
+  const { ok, data } = await api("/api/mock/new");
+  if (!ok) { $("mockBody").replaceChildren(el("div", { className: "notice", textContent: data.error })); return; }
+  mockAnswers = {};
+  const ids = data.questions.map((q) => q.id);
+  const box = el("div");
+  data.questions.forEach((q, n) => {
+    const item = el("div", { className: "hit" }, el("div", { className: "meta", textContent: `${n + 1}번 · ${q.subject}${q.tax ? " › " + q.tax : ""}` }),
+                    el("div", { style: "font-weight:600;margin:4px 0", textContent: q.question }));
+    for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) item.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
+    const buttons = q.choices.map((text, i) => {
+      const b = el("button", { className: "choice", textContent: `${CIRCLES[i]} ${text}` });
+      b.addEventListener("click", () => {                       // 제출 전에는 고르기만 한다(채점·정답 표시 없음)
+        mockAnswers[q.id] = String(i + 1);
+        buttons.forEach((x) => x.classList.toggle("picked", x === b));
+      });
+      return b;
+    });
+    item.append(...buttons);
+    box.append(item);
+  });
+  const submit = el("button", { id: "mockSubmit", textContent: "제출하고 채점하기" });
+  submit.addEventListener("click", async () => {
+    submit.disabled = true;
+    const res = await api("/api/mock/submit", { ids, answers: mockAnswers });
+    renderMockResult(res.data);
+    loadMockHistory(res.data.history);
+  });
+  box.append(el("div", { className: "row" }, submit));
+  $("mockBody").replaceChildren(box);
+});
+function renderMockResult(r) {
+  const box = el("div", { id: "mockResult" });
+  box.append(el("div", { className: "result-right", textContent: `점수 ${r.score} / ${r.max_score}점` }),
+             el("div", { className: "small", textContent: Object.entries(r.by_subject).map(([s, v]) => `${s} ${v.score}/${v.max}`).join(" · ") }));
+  if (!r.wrong.length) box.append(el("div", { textContent: "모두 맞혔습니다." }));
+  for (const w of r.wrong) {
+    box.append(el("div", { className: "hit" }, el("div", { className: "meta", textContent: `${w.id} · ${w.subject} › ${w.unit} · 내 답 ${w.your_choice || "미응답"} · 정답 ${w.answer}번` }),
+                  el("div", { textContent: w.question }), el("div", { className: "explain", textContent: w.explanation })));
+  }
+  $("mockBody").replaceChildren(box);
+}
+async function loadMockHistory(known) {
+  const history = known || (await api("/api/mock/history")).data.history;
+  const table = $("mockHistory");
+  table.replaceChildren(el("tr", {}, ...["회차", "날짜", "점수", "재무", "원가", "세무", "직전 대비"].map((h) => el("th", { textContent: h }))));
+  for (const h of history) {
+    const sub = (name) => `${h.by_subject[name].score}/${h.by_subject[name].max}`;
+    table.append(el("tr", {}, el("td", { textContent: h.n }), el("td", { textContent: new Date(h.taken_at * 1000).toLocaleString("ko-KR") }),
+      el("td", { className: "num", textContent: `${h.score}/${h.max_score}` }), el("td", { textContent: sub("재무회계") }),
+      el("td", { textContent: sub("원가회계") }), el("td", { textContent: sub("세무회계") }),
+      el("td", { className: "num", textContent: h.diff === null ? "-" : (h.diff > 0 ? "+" : "") + h.diff })));
+  }
+}
+document.querySelector('.tab[data-tab="mock"]').addEventListener("click", () => loadMockHistory());
 
 loadAnalysis(); loadUnits(); loadGlossary();
 </script>

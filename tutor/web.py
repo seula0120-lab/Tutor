@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import quiz, records
+from . import mock, quiz, records
 from .ai import explain
 from .analysis import unit_profile
 from .db import connect
@@ -94,6 +94,12 @@ def dispatch(method, path, params, body, conn):
                 picked = quiz.pick_quiz_question(conn, params.get("subject"), params.get("tax"),
                                                  params.get("unit"), exclude)
                 return (200, picked) if picked else (404, {"error": "조건에 맞는 문항이 없습니다."})
+            if path == "/api/mock/new":
+                questions = mock.pick_exam(conn)
+                return (200, {"questions": questions}) if len(questions) == mock.EXAM_SIZE else \
+                    (404, {"error": f"모의고사를 만들 문항이 {mock.EXAM_SIZE}개보다 적습니다."})
+            if path == "/api/mock/history":
+                return 200, {"history": mock.history(conn)}
             if path == "/api/notebook":
                 return 200, {"items": records.notebook(conn, params.get("subject"), params.get("unit")),
                              "unit_counts": records.unit_wrong_counts(conn)}
@@ -112,6 +118,8 @@ def dispatch(method, path, params, body, conn):
                 if "error" not in result:       # 확인만 함: 정답으로 세지 않는다
                     records.save(conn, result["id"], "", None, seen_only=True)
                 return (404 if "error" in result else 200), result
+            if path == "/api/mock/submit":
+                return 200, mock.grade(conn, body.get("ids") or [], body.get("answers") or {})
             if path == "/api/ask":
                 return api_ask(conn, body)
     except (KeyError, ValueError) as err:
