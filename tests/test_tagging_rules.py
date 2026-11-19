@@ -2,7 +2,7 @@
 from tutor.db import connect
 from tutor.tagging import tag_question
 
-MERGED_AWAY = {"기타", "리스", "법인세회계", "결산·발생주의", "현금흐름표", "금융소득", "퇴직·연금·기타소득"}
+MERGED_AWAY = {"기타", "리스", "결산·발생주의", "현금흐름표", "금융소득", "퇴직·연금·기타소득"}
 
 
 def test_question_text_wins_over_choices_and_explanation():
@@ -27,3 +27,9 @@ def test_audit_misclassified_questions_moved():
     assert got["114-7"] == "종합원가계산"
     assert got["74-3"] == "무형자산"
     assert got["126-5"] == "자본"
+
+
+def test_deferred_tax_and_financial_retirement_units_are_separate():
+    got = {r["id"]: r["unit"] for r in connect().execute("SELECT id, unit FROM questions")}
+    assert {got[i] for i in ("115-5", "121-5", "128-2")} == {"법인세회계"}
+    assert {got[i] for i in ("70-12", "120-13", "122-12", "123-15")} == {"금융·퇴직·기타소득"}
