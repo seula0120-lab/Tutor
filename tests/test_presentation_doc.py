@@ -20,7 +20,7 @@ def test_script_states_the_two_honesty_caveats_and_demo_questions():
 
 def test_numbers_in_script_match_current_unit_test_count():
     import subprocess, sys
-    out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q", "--ignore=tests/test_presentation_doc.py"], cwd=ROOT, capture_output=True, text=True).stdout
+    out = subprocess.run([sys.executable, "-m", "pytest", "--collect-only", "-q"], cwd=ROOT, capture_output=True, text=True).stdout
     collected = int(re.search(r"(\d+) tests? collected", out).group(1))
     claimed = int(re.search(r"단위 테스트 \*\*(\d+)개", DOC).group(1))
     assert claimed <= collected                      # 대본이 실제보다 많은 테스트를 주장하지 않는다
