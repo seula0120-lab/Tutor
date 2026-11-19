@@ -69,3 +69,14 @@ def test_cited_ids_and_context():
     assert cited_ids("(128-12) 그리고 (128-12), (7-3). 2026-11") == ["128-12", "7-3"]
     assert sentence_ids(SUMMARY) == ["128-6", "117-10", "120-9"]
     assert "(없음)" in build_context(EMPTY)
+
+
+def test_default_model_is_opus_and_env_override_works(monkeypatch):
+    import importlib
+    import tutor.ai as ai
+    monkeypatch.delenv("TUTOR_MODEL", raising=False)
+    assert importlib.reload(ai).MODEL == "claude-opus-5-5"
+    monkeypatch.setenv("TUTOR_MODEL", "claude-test-x")
+    assert importlib.reload(ai).MODEL == "claude-test-x"
+    monkeypatch.delenv("TUTOR_MODEL")
+    importlib.reload(ai)

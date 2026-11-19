@@ -8,7 +8,7 @@
 import os
 import re
 
-MODEL = os.environ.get("TUTOR_MODEL", "claude-sonnet-4-5")
+MODEL = os.environ.get("TUTOR_MODEL", "claude-opus-5-5")
 MAX_TOKENS = 600
 SOURCE_PATTERN = re.compile(r"\b(\d{1,3}-\d{1,2})\b")
 
