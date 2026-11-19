@@ -264,7 +264,7 @@ function renderSummary(sm) {
   if (sm.excluded.length) {
     const ul = el("ul");
     for (const e of sm.excluded) ul.append(el("li", {}, `${e.id} [${e.kind}] ${e.question.slice(0, 60)}${e.question.length > 60 ? "…" : ""}`));
-    card.append(el("h3", { textContent: "계산·조합형 문항 (문장 요약에서 제외)" }), ul);
+    card.append(el("h3", { textContent: "문장 요약에서 제외한 문항 (계산·조합·식별형·전항 정답 처리)" }), ul);
   }
   const run = el("div", { id: "topicRun", style: "margin-top:8px" });
   const go = el("button", { id: "topicGo", textContent: `이 주제 기출 풀기 (${sm.related_ids.length}문제)` });

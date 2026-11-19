@@ -13,7 +13,7 @@ from collections import Counter
 from difflib import SequenceMatcher
 
 from .notice import TAX_SUBJECT, tax_notice
-from .question_type import CALCULATION, COMBINATION, NEGATIVE, POSITIVE, UNKNOWN, classify
+from .question_type import CALCULATION, COMBINATION, IDENTIFY, NEGATIVE, POSITIVE, UNKNOWN, classify
 from .quiz import accepted_answers
 
 SIMILAR_RATIO = 0.9       # 이 이상 비슷하면 같은 문장으로 합친다(공백·문장부호 무시)
@@ -21,7 +21,8 @@ SENTENCE_LIMIT = 10       # 카드에 보여 줄 문장 수(맞는 문장·함�
 # 어느 문제에나 나오는 흔한 낱말: 문장 순위(핵심어 세기)에서는 핵심어로 치지 않는다.
 # 직접 다룬 기출이 있는지 보는 안내(covers_core_terms)에는 적용하지 않는다.
 STOPWORDS = frozenset({"처리", "설명", "방법", "경우", "내용", "관련", "대한", "다음", "해당", "사항"})
-EXCLUDED_KIND = {COMBINATION: "조합형", CALCULATION: "계산형", UNKNOWN: "판별불가"}
+EXCLUDED_KIND = {COMBINATION: "조합형", CALCULATION: "계산형", IDENTIFY: "식별형", UNKNOWN: "판별불가"}
+ALL_CORRECT_KIND = "전항 정답 처리 문항"     # 정답이 모든 보기인 문항: 맞는/틀린 문장을 가를 수 없다
 
 
 def related_results(results):
@@ -128,12 +129,16 @@ def coverage(rows):
 def build_summary(conn, results, terms):
     """검색 결과(점수 포함)와 질문 핵심어(terms, 동의어 확장 포함) → 요약 카드 dict.
 
-    {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·판별불가 목록), "related_ids"(관련 기출 전부), "tax_notice"(카드 전체 안내 또는 None)}
+    {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·식별형·판별불가·전항 정답 처리 목록), "related_ids"(관련 기출 전부), "tax_notice"(카드 전체 안내 또는 None)}
     """
     rows = [conn.execute("SELECT * FROM questions WHERE id = ?", (i,)).fetchone() for i in (r["id"] for r in related_results(results))]
     right, traps, excluded = [], [], []
     for row in rows:
-        kind = classify(row["question"], json.loads(row["choices"]))
+        choices = json.loads(row["choices"])
+        if accepted_answers(row["answer"]) >= {str(n) for n in range(1, len(choices) + 1)}:
+            excluded.append({"id": row["id"], "kind": ALL_CORRECT_KIND, "question": row["question"]})
+            continue
+        kind = classify(row["question"], choices)
         if kind not in (NEGATIVE, POSITIVE):
             excluded.append({"id": row["id"], "kind": EXCLUDED_KIND[kind], "question": row["question"]})
             continue
