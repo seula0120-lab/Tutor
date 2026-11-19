@@ -14,6 +14,7 @@ from tutor.web import Handler  # noqa: E402
 
 
 def main():
+    """화면 점검용 임시 DB·임시 서버를 띄운다."""
     db = ROOT / "scratch" / "check.db"
     db.parent.mkdir(parents=True, exist_ok=True)
     db.unlink(missing_ok=True)

@@ -85,6 +85,7 @@ def _doc_frequency(conn, term, rounds):
 
 
 def _score_rows(conn, weights, ids, rounds):
+    """후보 문항에 낱말 희귀도(idf) 가중 점수를 매겨 (점수, 행, 맞은 낱말) 을 점수 내림차순·최근 회차 순으로 돌려준다."""
     total = conn.execute(
         f"SELECT COUNT(*) FROM questions WHERE round IN ({','.join('?' * len(rounds))})", rounds).fetchone()[0]
     idf = {t: math.log((total + 1) / (_doc_frequency(conn, t, rounds) + 1)) for t in weights}

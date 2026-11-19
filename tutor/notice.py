@@ -17,6 +17,7 @@ _cache = {}
 
 
 def _cached(path, loader):
+    """파일 수정 시각이 같으면 읽은 결과를 다시 쓰고, 바뀌었으면 loader 로 다시 읽는다."""
     try:
         stamp = path.stat().st_mtime_ns
     except OSError:

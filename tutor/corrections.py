@@ -26,28 +26,33 @@ def _replace_once(text, entry):
     return text.replace(before, after, 1)
 
 
+def _apply_entry(item, entry):
+    """정정 하나를 (복사된) 문항 item 에 적용한다. item 은 호출한 쪽이 이미 복사해 둔 것이다."""
+    field = entry["field"]
+    match = _CHOICE.match(field)
+    if match:
+        i = int(match.group(1))
+        item["choices"][i] = _replace_once(item["choices"][i], entry)
+    elif field in ("question", "explanation"):
+        item[field] = _replace_once(item.get(field) or "", entry)
+    else:
+        raise ValueError(f"정정 {entry['id']}: 알 수 없는 칸 {field}")
+
+
+def _corrected(item, entries):
+    """정정을 적용한 새 문항을 돌려준다(원본 item 은 고치지 않는다)."""
+    copy = {**item, "choices": list(item["choices"])}
+    for entry in entries:
+        _apply_entry(copy, entry)
+    return copy
+
+
 def apply_corrections(rounds, corrections):
     """rounds: [(회차, 문항 목록)]. 정정을 적용한 새 목록을 돌려준다(입력은 고치지 않는다)."""
     by_id = {}
     for entry in corrections:
         by_id.setdefault(entry["id"], []).append(entry)
-    result = []
-    for round_no, items in rounds:
-        fixed = []
-        for item in items:
-            entries = by_id.get(f"{round_no}-{int(item['number'])}")
-            if entries:
-                item = {**item, "choices": list(item["choices"])}
-                for entry in entries:
-                    field = entry["field"]
-                    match = _CHOICE.match(field)
-                    if match:
-                        i = int(match.group(1))
-                        item["choices"][i] = _replace_once(item["choices"][i], entry)
-                    elif field in ("question", "explanation"):
-                        item[field] = _replace_once(item.get(field) or "", entry)
-                    else:
-                        raise ValueError(f"정정 {entry['id']}: 알 수 없는 칸 {field}")
-            fixed.append(item)
-        result.append((round_no, fixed))
-    return result
+    return [(round_no, [_corrected(item, by_id[f"{round_no}-{int(item['number'])}"])
+                        if f"{round_no}-{int(item['number'])}" in by_id else item
+                        for item in items])
+            for round_no, items in rounds]

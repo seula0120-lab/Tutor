@@ -62,6 +62,7 @@ def explain(query, summary, client=None):
 
 
 def _call_claude(client, query, context, base):
+    """Claude 를 한 번 부른다. 인증 실패·API 오류는 예외 대신 안내 메시지가 든 결과로 돌려준다."""
     import anthropic
     notice = "AI 설명을 위해 질문과 요약 카드의 문장 모음이 Anthropic API 로 전송됩니다."
     try:

@@ -39,6 +39,7 @@ def run_search_eval():
 
 
 def main():
+    """단위 테스트와 검색 평가를 돌려 결과를 보고한다."""
     results = [
         ("단위 테스트", *run_unit_tests()),
         ("검색 평가", *run_search_eval()),

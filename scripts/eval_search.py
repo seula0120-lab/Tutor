@@ -44,6 +44,7 @@ def evaluate(path, conn, round_limit=DEFAULT_ROUNDS):
 
 
 def main():
+    """질문셋으로 검색 평가를 돌려 결과를 출력한다."""
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     round_limit = LATEST_ROUNDS if "--latest" in sys.argv else DEFAULT_ROUNDS
     conn = connect()

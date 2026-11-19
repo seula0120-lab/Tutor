@@ -16,6 +16,7 @@ EXPORT_DIR = ROOT / "data" / "export"
 
 
 def main():
+    """오프라인 목차 HTML 을 만든다."""
     conn = connect()
     try:
         html = render_html(conn)
