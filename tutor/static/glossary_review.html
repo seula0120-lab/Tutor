@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>용어 사전 검토</title>
+<style>
+  body { font-family: system-ui, "Apple SD Gothic Neo", sans-serif; max-width: 1100px; margin: 24px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 20px; }
+  .small { font-size: 13px; color: #555; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; vertical-align: top; font-size: 14px; text-align: left; }
+  th { background: #f4f4f4; }
+  td.num { text-align: right; white-space: nowrap; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 48px; font: inherit; }
+  select, button { font: inherit; }
+  .saved { color: #1f7a3c; font-size: 12px; }
+  .row-ok { background: #f2faf4; } .row-fix { background: #fff6e8; }
+</style>
+</head>
+<body>
+<h1>용어 사전 검토</h1>
+<div class="small"><a href="/">← 질문 화면</a> · 문제 글에 나온 횟수가 많은 용어부터 보여 줍니다(보기·해설은 세지 않음). 검토 상태·메모·수정 제안은 <code>data/glossary_review.json</code> 에만 쌓이고 <code>glossary.json</code> 은 바뀌지 않습니다.</div>
+<div class="small" id="summary" style="margin-top:6px"></div>
+<table>
+  <thead><tr><th>용어</th><th>뜻</th><th>동의어</th><th>기출 문제 글 출현</th><th>검토 상태</th><th>메모 · 수정 제안</th></tr></thead>
+  <tbody id="rows"></tbody>
+</table>
+<script src="/static/quizcard.js"></script>
+<script>
+(async () => {
+  const { data } = await api("/api/glossary_review");
+  const body = $("rows");
+  const paint = () => {
+    const done = data.rows.filter((r) => r.status === "검토 완료").length, fix = data.rows.filter((r) => r.status === "수정 필요").length;
+    $("summary").textContent = `전체 ${data.rows.length}개 · 검토 완료 ${done} · 수정 필요 ${fix} · 미검토 ${data.rows.length - done - fix}`;
+  };
+  for (const row of data.rows) {
+    const status = el("select", { ariaLabel: `${row.term} 검토 상태` }, ...["", "검토 완료", "수정 필요"].map((s) => el("option", { value: s, textContent: s || "미검토", selected: s === row.status })));
+    const memo = el("textarea", { value: row.memo, placeholder: "메모", ariaLabel: `${row.term} 메모` });
+    const proposal = el("textarea", { value: row.proposed_meaning, placeholder: "고쳐 쓸 풀이(선택)", ariaLabel: `${row.term} 수정 제안` });
+    const note = el("span", { className: "saved" });
+    const tr = el("tr", { className: row.status === "검토 완료" ? "row-ok" : row.status === "수정 필요" ? "row-fix" : "" });
+    const save = el("button", { textContent: "저장" });
+    save.addEventListener("click", async () => {
+      const result = await api("/api/glossary_review", { term: row.term, status: status.value, memo: memo.value, proposed_meaning: proposal.value });
+      note.textContent = result.ok ? "저장됨" : (result.data.error || "저장 실패");
+      if (result.ok) {
+        Object.assign(row, { status: status.value, memo: memo.value, proposed_meaning: proposal.value });
+        tr.className = row.status === "검토 완료" ? "row-ok" : row.status === "수정 필요" ? "row-fix" : "";
+        paint();
+      }
+    });
+    tr.append(el("td", { textContent: row.term }), el("td", { textContent: row.meaning }), el("td", { textContent: row.synonyms.join(", ") }),
+              el("td", { className: "num", textContent: `${row.count}문항` }), el("td", {}, status),
+              el("td", {}, memo, proposal, save, " ", note));
+    body.append(tr);
+  }
+  paint();
+})();
+</script>
+</body>
+</html>

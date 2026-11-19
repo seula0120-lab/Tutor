@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import favorites, mock, quiz, records
+from . import favorites, glossary_review, mock, quiz, records
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -24,7 +24,7 @@ HOST = "127.0.0.1"
 # 주소 → (static 폴더의 파일, 내용 종류). 이 목록에 있는 파일만 내보낸다.
 STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8")}
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html"}
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
@@ -137,6 +137,13 @@ def api_reveal(conn, params, body):
     return 200, result
 
 
+def api_glossary_review_save(conn, params, body):
+    """용어 하나의 검토 상태·메모·수정 제안을 저장한다(사전 원본은 바꾸지 않는다)."""
+    glossary_review.save_review(conn, body.get("term", ""), body.get("status", ""), body.get("memo") or "",
+                                body.get("proposed_meaning") or "")
+    return 200, {"saved": True}
+
+
 # (방법, 주소) → 처리 함수(conn, params, body) → (상태코드, JSON 내용)
 ROUTES = {
     ("GET", "/api/analysis"): lambda conn, params, body: (200, unit_profile(conn, _scope(params))),
@@ -157,6 +164,8 @@ ROUTES = {
     ("POST", "/api/favorites"): lambda conn, params, body: (200, {"favorites": favorites.add(conn, body.get("q"), body.get("scope", "all"))}),
     ("POST", "/api/favorites/delete"): lambda conn, params, body: (200, {"favorites": favorites.remove(conn, body.get("q"))}),
     ("POST", "/api/mock/submit"): lambda conn, params, body: (200, mock.grade(conn, body.get("ids") or [], body.get("answers") or {})),
+    ("GET", "/api/glossary_review"): lambda conn, params, body: (200, {"rows": glossary_review.list_rows(conn)}),
+    ("POST", "/api/glossary_review"): api_glossary_review_save,
     ("POST", "/api/ask"): lambda conn, params, body: api_ask(conn, body),
 }
 

@@ -45,6 +45,13 @@ CREATE TABLE IF NOT EXISTS favorites (
     scope      TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS glossary_review (
+    term             TEXT PRIMARY KEY,
+    status           TEXT NOT NULL,     -- '' / 검토 완료 / 수정 필요
+    memo             TEXT NOT NULL,
+    proposed_meaning TEXT NOT NULL,     -- 고쳐 쓰자고 제안한 풀이(없으면 '')
+    updated          REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS mock_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     taken_at   REAL NOT NULL,
