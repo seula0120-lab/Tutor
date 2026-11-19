@@ -193,7 +193,7 @@ def test_sentences_without_core_term_are_dropped_and_most_matches_first():
               group("비정상공손은 정상공손과 달리 기간비용이다."), group("처리 방법만 말하는 문장이다.")]
     picked = select_sentences(groups, ["정상공손", "비정상공손", "처리"])
     assert [g["text"] for g in picked] == ["비정상공손은 정상공손과 달리 기간비용이다.",       # 핵심어 2개(정상공손·비정상공손)
-                                            "정상공손은 원가에 포함한다.", "처리 방법만 말하는 문장이다."]
+                                            "정상공손은 원가에 포함한다."]            # '처리' 만 든 문장은 불용어라 빠진다
     assert picked[0]["matched"] == ["정상공손", "비정상공손"] and "matched" not in groups[0]   # 원본은 그대로
 
 
@@ -302,3 +302,18 @@ def test_ask_flags_no_direct_hit(conn):
     assert found["no_direct"] is False
     _, none = dispatch("POST", "/api/ask", {}, {"q": "양자컴퓨터 블록체인"}, conn)
     assert none["no_direct"] is True and none["search"]["results"] == []
+
+
+# ---- 불용어 ----
+def test_stopwords_are_not_core_terms_in_ranking():
+    groups = [group("처리 방법은 경우에 따라 다르다."), group("정상공손은 원가에 포함한다."),
+              group("비정상공손품은 기간비용으로 처리한다.")]
+    picked = select_sentences(groups, ["정상공손", "비정상공손", "처리"])
+    assert [g["text"][:5] for g in picked] == ["정상공손은", "비정상공손"]       # 불용어만 든 문장은 빠진다
+    assert picked[1]["matched"] == ["비정상공손"]                              # '처리' 는 세지 않는다
+
+
+def test_stopword_filter_is_not_applied_to_direct_hit_notice(tmp_path):
+    from tutor.summary import covers_core_terms
+    conn = make_conn(tmp_path, (3, [item(1, "다음 중 처리 방법으로 옳은 것은?", C4, "1")]))
+    assert covers_core_terms(conn, [{"id": "3-1"}], ["처리"]) is True            # 안내 기준은 그대로

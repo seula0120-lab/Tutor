@@ -18,6 +18,9 @@ from .quiz import accepted_answers
 
 SIMILAR_RATIO = 0.9       # 이 이상 비슷하면 같은 문장으로 합친다(공백·문장부호 무시)
 SENTENCE_LIMIT = 10       # 카드에 보여 줄 문장 수(맞는 문장·함정 각각)
+# 어느 문제에나 나오는 흔한 낱말: 문장 순위(핵심어 세기)에서는 핵심어로 치지 않는다.
+# 직접 다룬 기출이 있는지 보는 안내(covers_core_terms)에는 적용하지 않는다.
+STOPWORDS = frozenset({"처리", "설명", "방법", "경우", "내용", "관련", "대한", "다음", "해당", "사항"})
 EXCLUDED_KIND = {COMBINATION: "조합형", CALCULATION: "계산형", UNKNOWN: "판별불가"}
 
 
@@ -105,8 +108,9 @@ def covers_core_terms(conn, results, terms):
 
 
 def select_sentences(groups, terms):
-    """핵심어가 하나도 없는 문장은 빼고, 핵심어를 많이 맞힌 순 → 출제 횟수 → 최근 회차 순으로 SENTENCE_LIMIT 개만 돌려준다.
+    """불용어(STOPWORDS)를 뺀 핵심어가 하나도 없는 문장은 빼고, 핵심어를 많이 맞힌 순 → 출제 횟수 → 최근 회차 순으로 SENTENCE_LIMIT 개만 돌려준다.
     원본 groups 는 고치지 않고 복사해서 matched(맞힌 핵심어)를 붙인다."""
+    terms = [t for t in terms if normalize(t) not in STOPWORDS]
     scored = [{**g, "matched": matched_terms(g["text"], terms)} for g in groups]
     kept = [g for g in scored if g["matched"]]
     kept.sort(key=lambda g: (-len(g["matched"]), -g["count"], -max(g["rounds"])))
