@@ -15,6 +15,7 @@ from .analysis import unit_profile
 from .db import connect
 from .glossary import annotate, load_glossary
 from .search import DEFAULT_ROUNDS, search_theory
+from .sync import format_report, sync_raw
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
@@ -141,10 +142,22 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+def startup_sync():
+    """서버 시작 때 data/raw 의 새 회차를 한 번 반영한다. 실패해도 서버는 기존 DB 로 계속 뜬다."""
+    conn = connect()
+    try:
+        print("\n".join(format_report(sync_raw(conn))))
+    except Exception as err:
+        print(f"원본 동기화 실패({type(err).__name__}: {err}). 기존 DB 로 계속합니다.")
+    finally:
+        conn.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description="전산세무 1급 이론 튜터 (로컬 웹)")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
+    startup_sync()
     server = ThreadingHTTPServer((HOST, args.port), Handler)
     print(f"http://{HOST}:{args.port}/ 에서 실행 중입니다. 끝내려면 Ctrl+C.")
     try:
