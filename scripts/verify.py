@@ -42,6 +42,7 @@ def main():
     results = [
         ("단위 테스트", *run_unit_tests()),
         ("검색 평가", *run_search_eval()),
+        ("화면 자동 점검", "미실행(수동)", "필요할 때 node scripts/check_ui.mjs (Chrome 필요)"),
         ("Claude 실제 호출", "미실행", "API 키가 필요한 검증은 이 명령에 포함하지 않음"),
     ]
     for name, status, detail in results:
