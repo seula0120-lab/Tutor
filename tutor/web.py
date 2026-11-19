@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import mock, quiz, records
+from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
 from .db import connect
@@ -100,6 +101,8 @@ def dispatch(method, path, params, body, conn):
                 picked = quiz.pick_quiz_question(conn, params.get("subject"), params.get("tax"),
                                                  params.get("unit"), exclude)
                 return (200, picked) if picked else (404, {"error": "조건에 맞는 문항이 없습니다."})
+            if path == "/api/toc":
+                return 200, {"toc": build_toc(conn)}
             if path == "/api/mock/new":
                 questions = mock.pick_exam(conn)
                 return (200, {"questions": questions}) if len(questions) == mock.EXAM_SIZE else \
@@ -140,6 +143,8 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path in ("/", "/index.html"):
             return self._send_bytes(200, (STATIC_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
+        if url.path == "/toc":
+            return self._send_bytes(200, (STATIC_DIR / "toc.html").read_bytes(), "text/html; charset=utf-8")
         if url.path in STATIC_FILES:
             return self._send_bytes(200, (STATIC_DIR / STATIC_FILES[url.path][0]).read_bytes(), STATIC_FILES[url.path][1])
         params = {k: v[0] for k, v in parse_qs(url.query).items()}
