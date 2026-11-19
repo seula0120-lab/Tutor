@@ -73,13 +73,18 @@ def unit_wrong_counts(conn):
 
 
 def unit_stats(conn):
-    """단원별 풀이 통계 {(과목, 세목, 단원): {attempts, correct, questions}}. 확인만 한 기록은 센 적 없다."""
-    rows = conn.execute("""SELECT q.subject, q.tax, q.unit, COUNT(*) AS attempts, SUM(r.correct = 1) AS right,
-                                  COUNT(DISTINCT r.question_id) AS questions
+    """단원별 풀이 통계 {(과목, 세목, 단원): {attempts, correct, questions}}.
+
+    문항마다 가장 최근 결과(확인만 한 기록 제외) 하나만 센다: 같은 문항을 여러 번 풀어도 마지막 결과만 반영한다.
+    그래서 attempts == questions(푼 문항 수), correct 는 마지막 결과가 정답인 문항 수다."""
+    rows = conn.execute("""SELECT q.subject, q.tax, q.unit, COUNT(*) AS solved, SUM(r.correct = 1) AS right
                            FROM records r JOIN questions q ON q.id = r.question_id
-                           WHERE r.seen_only = 0 GROUP BY q.subject, q.tax, q.unit""").fetchall()
-    return {(r["subject"], r["tax"], r["unit"]): {"attempts": r["attempts"], "correct": r["right"],
-                                                   "questions": r["questions"]} for r in rows}
+                           WHERE r.seen_only = 0
+                             AND r.id = (SELECT r2.id FROM records r2 WHERE r2.question_id = r.question_id AND r2.seen_only = 0
+                                         ORDER BY r2.ts DESC, r2.id DESC LIMIT 1)
+                           GROUP BY q.subject, q.tax, q.unit""").fetchall()
+    return {(r["subject"], r["tax"], r["unit"]): {"attempts": r["solved"], "correct": r["right"],
+                                                   "questions": r["solved"]} for r in rows}
 
 
 def correct_ids(conn):

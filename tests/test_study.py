@@ -88,3 +88,20 @@ def test_study_apis(tmp_path):
     status, got = dispatch("GET", "/api/quiz_set", {"subject": row["subject"], "tax": row["tax"], "unit": row["unit"]}, {}, conn)
     assert status == 200 and 1 <= len(got["ids"]) <= 5
     assert dispatch("GET", "/api/quiz_set", {"unit": "없는단원"}, {}, conn)[0] == 404
+
+
+def test_accuracy_uses_only_latest_result_per_question(tmp_path):
+    conn = bank(tmp_path)
+    unit = conn.execute("SELECT unit FROM questions WHERE id = '1-1'").fetchone()["unit"]
+    ids = [f"{r}-1" for r in range(1, 7)]
+    for n, qid in enumerate(ids):                                   # 처음엔 전부 오답
+        records.save(conn, qid, "1", False, now=100.0 + n)
+    for n, qid in enumerate(ids[:3]):                               # 3문항은 나중에 정답 → 마지막 결과 3/6
+        records.save(conn, qid, "2", True, now=200.0 + n)
+    records.save(conn, ids[0], "1", False, now=300.0)               # 첫 문항은 다시 오답 → 마지막 결과가 오답
+    records.save(conn, ids[5], "", None, seen_only=True, now=400.0)  # 확인만 한 기록은 마지막 결과가 되지 않는다
+    row = unit_row(study_order(conn), unit)
+    assert row["solved_questions"] == 6
+    assert row["accuracy"] == round(2 / 6, 3)
+    stats = records.unit_stats(conn)
+    assert sum(v["attempts"] for v in stats.values()) == 6 == sum(v["questions"] for v in stats.values())
