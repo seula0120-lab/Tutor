@@ -15,7 +15,7 @@ def item(number, question, choices, answer, explanation="해설."):
             "answer": answer, "explanation": explanation, "points": 2}
 
 
-C4 = ["가", "나", "다", "라"]
+C4 = ["첫째 문장이다.", "둘째 문장이다.", "셋째 문장이다.", "넷째 문장이다."]
 
 # 회차 두 개(1회·2회)에 서로 다른 단원·세목 문항을 둔다.
 ROUND_ONE = [

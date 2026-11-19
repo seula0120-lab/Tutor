@@ -14,11 +14,13 @@ from .ai import explain
 from .analysis import unit_profile
 from .db import connect
 from .glossary import annotate, load_glossary
-from .search import DEFAULT_ROUNDS, LATEST_ROUNDS, search_theory
+from .search import DEFAULT_ROUNDS, LATEST_ROUNDS, RESULT_LIMIT, search_theory
+from .summary import build_summary
 from .sync import format_report, sync_raw
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
+SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
 def parse_scope(value, default=DEFAULT_ROUNDS):
@@ -59,12 +61,14 @@ def api_glossary(conn, params):
 
 
 def api_ask(conn, body):
-    """질문창: 검색 결과와 AI 설명(키가 있을 때)을 돌려준다. AI 가 실패해도 검색 결과는 항상 준다."""
+    """질문창: 검색 결과 + 요약 카드(항상) + AI 설명(키가 있을 때). AI 가 실패해도 앞의 둘은 항상 준다."""
     query = (body.get("q") or "").strip()
     if not query:
         return 400, {"error": "질문을 입력해 주세요."}
-    search = search_theory(query, conn, round_limit=parse_scope(body.get("scope")))
-    return 200, {"search": search, "ai": explain(query, search, conn)}
+    found = search_theory(query, conn, round_limit=parse_scope(body.get("scope")), limit=SUMMARY_LIMIT)
+    summary = build_summary(conn, found["results"])        # 요약은 더 넓은 후보(상위 SUMMARY_LIMIT)에서 만든다
+    shown = {**found, "results": found["results"][:RESULT_LIMIT]}   # 목록은 상위 RESULT_LIMIT 개만 보여 준다
+    return 200, {"search": shown, "summary": summary, "ai": explain(query, summary)}
 
 
 def dispatch(method, path, params, body, conn):

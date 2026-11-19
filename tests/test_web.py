@@ -149,3 +149,12 @@ def test_http_server_serves_page_and_api(tmp_path, conn):
 def test_quiz_card_has_tax_notice_only_for_tax_questions(conn):
     assert quiz.find_question(conn, 1, 11)["tax_notice"] == "1회 · 세법 개정 확인 필요"
     assert quiz.find_question(conn, 1, 1)["tax_notice"] is None
+
+
+def test_ask_returns_summary_card_without_api_key(conn):
+    status, payload = dispatch("POST", "/api/ask", {}, {"q": "저가법"}, conn)
+    assert status == 200
+    assert set(payload["summary"]) == {"coverage", "right", "traps", "excluded", "tax_notice"}
+    assert payload["summary"]["coverage"]["questions"] >= 1
+    assert payload["ai"]["status"] == "no_key"                       # 키가 없어도 카드는 나온다
+    assert len(payload["search"]["results"]) <= 5

@@ -37,6 +37,13 @@
   .meaning { background: #fff6d6; border-radius: 6px; padding: 8px 10px; margin-top: 8px; display: none; }
   .ai { background: #f6f1ff; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin-top: 8px; }
   .small { font-size: 12px; color: #5b6577; }
+  .card { border: 2px solid #2b5fd9; border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #f7faff; }
+  .card h3 { margin: 8px 0 4px; font-size: 14px; }
+  .card ul { margin: 2px 0 6px; padding-left: 20px; }
+  .card li { margin: 3px 0; font-size: 13px; }
+  .src { color: #5b6577; font-size: 12px; }
+  .trap h3 { color: #b3261e; }
+  .okc h3 { color: #1f7a3c; }
   .taxflag { display: inline-block; font-size: 12px; color: #8a4b00; background: #ffe9cc; border-radius: 4px; padding: 1px 6px; margin: 2px 0; }
 </style>
 </head>
@@ -52,7 +59,7 @@
       <select id="scope"><option value="all">전체 회차</option><option value="10">최신 10회분</option></select>
     </label>
   </div>
-  <div class="small" style="margin-top:6px">AI 설명을 켜면(API 키가 있을 때) 질문과 검색된 기출이 Anthropic API 로 전송되며 사용량에 따라 비용이 듭니다.</div>
+  <div class="small" style="margin-top:6px">요약 카드는 API 키 없이 동작합니다. API 키가 있으면 카드의 문장 모음이 Anthropic API 로 전송되어 3~5줄 설명이 덧붙고, 사용량에 따라 비용이 듭니다.</div>
   <div id="answer"></div>
 </div>
 
@@ -136,9 +143,10 @@ function renderAnswer(data) {
   const box = $("answer");
   box.replaceChildren();
   if (data.error) { box.append(el("div", { className: "result-wrong", textContent: data.error })); return; }
+  box.append(renderSummary(data.summary));
   const ai = data.ai;
   if (ai && ai.status === "ok") {
-    box.append(el("div", { className: "small", textContent: "AI 설명 (검색된 기출을 근거로, 출처는 회차-문항)" }),
+    box.append(el("div", { className: "small", textContent: "AI 설명 (요약 카드의 문장만 근거로, 출처는 회차-문항)" }),
                el("div", { className: "ai", textContent: ai.text }));
     if (ai.ungrounded.length) box.append(el("div", { className: "notice", textContent: "주의: 검색 근거에 없는 출처가 인용됐습니다: " + ai.ungrounded.join(", ") }));
     box.append(el("div", { className: "small", textContent: ai.message }));
@@ -160,6 +168,35 @@ function renderAnswer(data) {
     row.append(open);
     box.append(row);
   }
+}
+
+function sentenceList(items) {
+  if (!items.length) return el("div", { className: "small", textContent: "해당 문장이 없습니다." });
+  const ul = el("ul");
+  for (const it of items) {
+    const li = el("li", {}, it.text + " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""})` }));
+    if (it.tax_notice) li.append(" ", el("span", { className: "taxflag", textContent: it.tax_notice }));
+    ul.append(li);
+  }
+  return ul;
+}
+function renderSummary(sm) {
+  const card = el("div", { className: "card" });
+  const cv = sm.coverage;
+  card.append(el("b", { textContent: "주제 요약 카드" }));
+  if (!cv.questions) { card.append(el("div", { className: "small", textContent: "요약할 관련 기출이 없습니다." })); return card; }
+  card.append(el("div", { className: "small", textContent: `출제 현황: 관련 기출 ${cv.questions}문항 · ${cv.round_count}개 회차(${cv.rounds.join(", ")}회) · 가장 최근 ${cv.latest_round}회` }));
+  if (sm.tax_notice) card.append(el("div", {}, el("span", { className: "taxflag", textContent: sm.tax_notice })));
+  const ok = el("div", { className: "okc" }, el("h3", { textContent: "맞는 문장 (시험에서 옳다고 인정된 내용)" }), sentenceList(sm.right));
+  const trap = el("div", { className: "trap" }, el("h3", { textContent: "자주 나온 함정 (틀린 문장으로 출제된 내용)" }), sentenceList(sm.traps));
+  card.append(ok, trap);
+  if (sm.excluded.length) {
+    const ul = el("ul");
+    for (const e of sm.excluded) ul.append(el("li", {}, `${e.id} [${e.kind}] ${e.question.slice(0, 60)}${e.question.length > 60 ? "…" : ""}`));
+    card.append(el("h3", { textContent: "계산·조합형 문항 (문장 요약에서 제외)" }), ul);
+  }
+  card.append(el("div", { className: "small", textContent: "문항 유형(옳은/옳지 않은 것)은 문제 글의 낱말로 자동 판별하므로 틀릴 수 있습니다. 시험 판단은 공식 해설을 따르세요." }));
+  return card;
 }
 
 // ---- 문제 분석 탭 ----
