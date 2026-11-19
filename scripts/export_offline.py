@@ -2,7 +2,7 @@
 
 사용법: .venv/bin/python scripts/export_offline.py
 열기:   Finder 에서 파일을 더블클릭하거나, 브라우저 주소창에 file:///Users/<사용자>/Desktop/회계튜터/data/export/회계튜터_목차.html
-정답·해설은 파일에 넣지 않는다(채점·기록 없음).
+정답·해설이 파일에 들어 있다(화면에서 보기를 고르면 채점하고 풀이 기록은 남기지 않는다). 파일을 남에게 보내면 정답도 전달된다.
 """
 import sys
 from pathlib import Path

@@ -1,2 +1,4 @@
 anthropic>=0.40
 pytest
+pymupdf
+pyhwp
