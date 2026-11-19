@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import mock, quiz, records
+from . import favorites, mock, quiz, records
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -101,6 +101,8 @@ def dispatch(method, path, params, body, conn):
                 picked = quiz.pick_quiz_question(conn, params.get("subject"), params.get("tax"),
                                                  params.get("unit"), exclude)
                 return (200, picked) if picked else (404, {"error": "조건에 맞는 문항이 없습니다."})
+            if path == "/api/favorites":
+                return 200, {"favorites": favorites.list_all(conn)}
             if path == "/api/toc":
                 return 200, {"toc": build_toc(conn)}
             if path == "/api/mock/new":
@@ -127,6 +129,10 @@ def dispatch(method, path, params, body, conn):
                 if "error" not in result:       # 확인만 함: 정답으로 세지 않는다
                     records.save(conn, result["id"], "", None, seen_only=True)
                 return (404 if "error" in result else 200), result
+            if path == "/api/favorites":
+                return 200, {"favorites": favorites.add(conn, body.get("q"), body.get("scope", "all"))}
+            if path == "/api/favorites/delete":
+                return 200, {"favorites": favorites.remove(conn, body.get("q"))}
             if path == "/api/mock/submit":
                 return 200, mock.grade(conn, body.get("ids") or [], body.get("answers") or {})
             if path == "/api/ask":

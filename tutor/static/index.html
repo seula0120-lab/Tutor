@@ -37,6 +37,7 @@
   .meaning { background: #fff6d6; border-radius: 6px; padding: 8px 10px; margin-top: 8px; display: none; }
   .ai { background: #f6f1ff; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin-top: 8px; }
   .small { font-size: 12px; color: #5b6577; }
+  .chip { padding: 2px 8px; font-size: 12px; margin: 2px 2px 2px 0; }
   .choice.picked { background: #e3ecff; border-color: #2b5fd9; }
   .card { border: 2px solid #2b5fd9; border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #f7faff; }
   .card h3 { margin: 8px 0 4px; font-size: 14px; }
@@ -60,6 +61,8 @@
       <select id="scope"><option value="all">전체 회차</option><option value="10">최신 10회분</option></select>
     </label>
   </div>
+  <div id="recent" class="small" style="margin-top:8px"></div>
+  <div id="favs" class="small" style="margin-top:4px"></div>
   <div class="small" style="margin-top:6px">요약 카드는 API 키 없이 동작합니다. API 키가 있으면 카드의 문장 모음이 Anthropic API 로 전송되어 3~5줄 설명이 덧붙고, 사용량에 따라 비용이 듭니다.</div>
   <div id="answer"></div>
 </div>
@@ -144,15 +147,58 @@ document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click",
 function showTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
 
 // ---- 질문창 ----
-$("ask").addEventListener("click", async () => {
-  const q = $("q").value.trim();
+let lastAsk = { q: "", scope: "all" };
+async function runAsk(q, scope) {
+  q = q.trim();
   if (!q) return;
   $("ask").disabled = true;
   $("answer").replaceChildren(el("div", { className: "small", textContent: "찾는 중…" }));
-  const { data } = await api("/api/ask", { q, scope: $("scope").value });
+  const { data } = await api("/api/ask", { q, scope });
   $("ask").disabled = false;
+  lastAsk = { q, scope };
+  if (!data.error) rememberQuery(q);
   renderAnswer(data);
-});
+}
+$("ask").addEventListener("click", () => runAsk($("q").value, $("scope").value));
+
+// ---- 최근 질문(브라우저 localStorage, 쓸 수 없어도 정상 동작) ----
+const RECENT_KEY = "tutorRecentQueries";
+function readRecent() {
+  try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(0, 10) : []; }
+  catch (e) { return []; }
+}
+function rememberQuery(q) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify([q, ...readRecent().filter((x) => x !== q)].slice(0, 10))); } catch (e) { /* 저장 실패는 무시 */ }
+  renderRecent();
+}
+function renderRecent() {
+  const box = $("recent");
+  const items = readRecent();
+  box.replaceChildren(el("b", { textContent: "최근 질문 " }), ...(items.length ? items.map((q) => {
+    const b = el("button", { className: "ghost chip", textContent: q });
+    b.addEventListener("click", () => { $("q").value = q; runAsk(q, $("scope").value); });
+    return b;
+  }) : [el("span", { textContent: "(없음)" })]));
+}
+
+// ---- 즐겨찾기(서버 DB) ----
+async function loadFavorites() {
+  const { data } = await api("/api/favorites");
+  const box = $("favs");
+  box.replaceChildren(el("b", { textContent: "즐겨찾기 " }), ...(data.favorites.length ? data.favorites.map((f) => {
+    const open = el("button", { className: "ghost chip", textContent: "★ " + f.query });
+    open.addEventListener("click", () => { $("q").value = f.query; $("scope").value = f.scope; runAsk(f.query, f.scope); });
+    const del = el("button", { className: "ghost chip", textContent: "삭제", title: "즐겨찾기에서 삭제" });
+    del.addEventListener("click", async () => { await api("/api/favorites/delete", { q: f.query }); loadFavorites(); updateStar(); });
+    return el("span", { style: "white-space:nowrap" }, open, del, " ");
+  }) : [el("span", { textContent: "(없음)" })]));
+  window.favoriteQueries = new Set(data.favorites.map((f) => f.query));
+}
+async function updateStar() {
+  const star = $("starBtn");
+  if (!star) return;
+  star.textContent = window.favoriteQueries.has(lastAsk.q) ? "★ 즐겨찾기 해제" : "☆ 즐겨찾기";
+}
 
 function renderAnswer(data) {
   const box = $("answer");
@@ -199,7 +245,16 @@ function sentenceList(items) {
 function renderSummary(sm) {
   const card = el("div", { className: "card" });
   const cv = sm.coverage;
-  card.append(el("b", { textContent: "주제 요약 카드" }));
+  card.append(el("b", { textContent: "주제 요약 카드 " }));
+  const star = el("button", { id: "starBtn", className: "ghost chip" });
+  star.addEventListener("click", async () => {
+    const saved = window.favoriteQueries.has(lastAsk.q);
+    await api(saved ? "/api/favorites/delete" : "/api/favorites", { q: lastAsk.q, scope: lastAsk.scope });
+    await loadFavorites();
+    updateStar();
+  });
+  card.append(star);
+  setTimeout(updateStar, 0);
   if (!cv.questions) { card.append(el("div", { className: "small", textContent: "요약할 관련 기출이 없습니다." })); return card; }
   card.append(el("div", { className: "small", textContent: `출제 현황: 관련 기출 ${cv.questions}문항 · ${cv.round_count}개 회차(${cv.rounds.join(", ")}회) · 가장 최근 ${cv.latest_round}회` }));
   if (sm.tax_notice) card.append(el("div", {}, el("span", { className: "taxflag", textContent: sm.tax_notice })));
@@ -391,7 +446,7 @@ async function loadMockHistory(known) {
 }
 document.querySelector('.tab[data-tab="mock"]').addEventListener("click", () => loadMockHistory());
 
-loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary();
+loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); renderRecent(); loadFavorites();
 </script>
 </body>
 </html>
