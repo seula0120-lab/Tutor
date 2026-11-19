@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>전산세무 1급 이론 튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; max-width: 920px; margin: 24px auto; padding: 0 16px; color: #1d2433; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #5b6577; font-size: 13px; margin-bottom: 16px; }
+  .box { border: 1px solid #d5dae3; border-radius: 10px; padding: 14px; margin-bottom: 16px; background: #fff; }
+  textarea, input, select, button { font: inherit; }
+  textarea { width: 100%; box-sizing: border-box; min-height: 60px; padding: 8px; border: 1px solid #b9c1d0; border-radius: 6px; }
+  button { padding: 6px 14px; border: 1px solid #2b5fd9; background: #2b5fd9; color: #fff; border-radius: 6px; cursor: pointer; }
+  button.ghost { background: #fff; color: #2b5fd9; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+  .notice { font-size: 12px; color: #6b5200; background: #fff6d6; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 0; }
+  .tab { border: 1px solid #d5dae3; border-bottom: none; border-radius: 8px 8px 0 0; background: #eef1f6; color: #1d2433; padding: 8px 16px; }
+  .tab.active { background: #fff; font-weight: 700; color: #2b5fd9; }
+  .panel { display: none; border: 1px solid #d5dae3; border-radius: 0 10px 10px 10px; padding: 14px; background: #fff; }
+  .panel.active { display: block; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border-bottom: 1px solid #e3e7ee; padding: 5px 6px; text-align: left; }
+  th { background: #f4f6fa; }
+  td.num { text-align: right; }
+  .hit { border-bottom: 1px solid #e3e7ee; padding: 8px 0; }
+  .meta { font-size: 12px; color: #5b6577; }
+  .choice { display: block; width: 100%; text-align: left; margin: 4px 0; background: #fff; color: #1d2433; border: 1px solid #b9c1d0; }
+  .choice.wrong { background: #ffe4e4; border-color: #d33; }
+  .choice.right { background: #dff5e3; border-color: #2a9d4b; }
+  .result-wrong { color: #c22; font-weight: 700; margin-top: 6px; }
+  .result-right { color: #1f7a3c; font-weight: 700; margin-top: 6px; }
+  .explain { background: #f1f6ff; border-radius: 6px; padding: 8px 10px; margin-top: 8px; white-space: pre-wrap; }
+  .term { border-bottom: 2px solid #e08a00; cursor: pointer; }
+  .meaning { background: #fff6d6; border-radius: 6px; padding: 8px 10px; margin-top: 8px; display: none; }
+  .ai { background: #f6f1ff; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin-top: 8px; }
+  .small { font-size: 12px; color: #5b6577; }
+</style>
+</head>
+<body>
+<h1>전산세무 1급 이론 튜터</h1>
+<div class="sub">이론 30점 영역 · 기출 문항 검색과 공식 해설 · 로컬(127.0.0.1)에서만 동작</div>
+
+<div class="box">
+  <textarea id="q" placeholder="궁금한 것을 물어보세요. 예: 자기주식은 어떻게 처리해? / 수출하면 부가세가 0%라는데 무슨 뜻이야?"></textarea>
+  <div class="row">
+    <button id="ask">질문하기</button>
+    <label class="small">검색 범위
+      <select id="scope"><option value="10">최신 10회분</option><option value="all">전체 회차</option></select>
+    </label>
+  </div>
+  <div id="aiNotice" class="notice" style="display:none"></div>
+  <div id="answer"></div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-tab="analysis">문제 분석</button>
+  <button class="tab" data-tab="answers">기출 답안</button>
+  <button class="tab" data-tab="words">단어 주석</button>
+</div>
+
+<div id="analysis" class="panel active">
+  <div class="row" style="margin-top:0">
+    <label class="small">범위 <select id="anScope"><option value="10">최신 10회분</option><option value="all">전체 회차</option></select></label>
+    <span id="anInfo" class="small"></span>
+  </div>
+  <div style="margin-top:8px"><table id="anTable"></table></div>
+</div>
+
+<div id="answers" class="panel">
+  <div class="row" style="margin-top:0">
+    <b>회차·번호 조회</b>
+    <input id="lkRound" type="number" placeholder="회차" style="width:80px">
+    <input id="lkNumber" type="number" placeholder="번호(1~15)" style="width:110px">
+    <button id="lkGo">조회</button>
+  </div>
+  <div class="row"><b>단원 퀴즈</b>
+    <select id="quizUnit"></select>
+    <button id="quizGo" class="ghost">문제 받기</button>
+  </div>
+  <div id="card" style="margin-top:12px"></div>
+</div>
+
+<div id="words" class="panel">
+  <div class="row" style="margin-top:0">
+    <b>문제 속 용어 보기</b>
+    <input id="wdRound" type="number" placeholder="회차" style="width:80px">
+    <input id="wdNumber" type="number" placeholder="번호(1~15)" style="width:110px">
+    <button id="wdGo">불러오기</button>
+  </div>
+  <div class="small">밑줄 친 용어를 누르면 쉬운 풀이가 나옵니다. 용어 풀이는 읽기 보조용이며 시험 판단 근거가 아닙니다.</div>
+  <div id="wdCard" style="margin-top:10px"></div>
+  <div id="wdMeaning" class="meaning"></div>
+  <div class="row"><b>용어 사전</b> <input id="gq" placeholder="용어·일상어 검색" style="width:220px"></div>
+  <div id="gList" style="margin-top:6px"></div>
+</div>
+
+<script>
+// ---- 작은 도우미 ----
+const $ = (id) => document.getElementById(id);
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  Object.assign(node, props);
+  for (const c of children) node.append(c);
+  return node;
+}
+async function api(path, body) {
+  const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const response = await fetch(path, options);
+  return { ok: response.ok, data: await response.json() };
+}
+const query = (obj) => new URLSearchParams(Object.entries(obj).filter(([, v]) => v !== "" && v != null)).toString();
+
+// ---- 탭 ----
+document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
+  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.tab));
+}));
+function showTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
+
+// ---- 질문창 ----
+$("ask").addEventListener("click", async () => {
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("ask").disabled = true;
+  $("answer").replaceChildren(el("div", { className: "small", textContent: "찾는 중…" }));
+  const { data } = await api("/api/ask", { q, scope: $("scope").value });
+  $("ask").disabled = false;
+  renderAnswer(data);
+});
+
+function renderAnswer(data) {
+  const box = $("answer");
+  box.replaceChildren();
+  if (data.error) { box.append(el("div", { className: "result-wrong", textContent: data.error })); return; }
+  const ai = data.ai;
+  if (ai && ai.status === "ok") {
+    box.append(el("div", { className: "small", textContent: "AI 설명 (검색된 기출을 근거로, 출처는 회차-문항)" }),
+               el("div", { className: "ai", textContent: ai.text }));
+  } else if (ai && ai.message) {
+    box.append(el("div", { className: "notice", textContent: ai.message }));
+  }
+  const s = data.search;
+  const info = `검색 범위: ${s.scope} · 검색어: ${s.terms.join(", ") || "-"}` + (s.expanded.length ? ` · 일상어 확장: ${s.expanded.join(", ")}` : "");
+  box.append(el("div", { className: "small", style: "margin-top:8px", textContent: info }));
+  if (s.note) box.append(el("div", { className: "notice", textContent: s.note }));
+  for (const r of s.results) {
+    const row = el("div", { className: "hit" });
+    row.append(el("div", { className: "meta", textContent: `출처 ${r.id} (${r.round}회 ${r.number}번) · ${[r.subject, r.tax, r.unit].filter(Boolean).join(" › ")}` }),
+               el("div", { textContent: r.question }));
+    const open = el("button", { className: "ghost", textContent: "문제·해설 열기" });
+    open.style.marginTop = "4px";
+    open.addEventListener("click", () => { showTab("answers"); loadQuestion(r.round, r.number); });
+    row.append(open);
+    box.append(row);
+  }
+}
+
+// ---- 문제 분석 탭 ----
+async function loadAnalysis() {
+  const { data } = await api("/api/analysis?" + query({ scope: $("anScope").value }));
+  $("anInfo").textContent = `분석 회차 ${data.rounds}개 · 문항 ${data.total_questions}개 (배점은 문항당 점수의 합 ÷ 회차 수)`;
+  const table = $("anTable");
+  table.replaceChildren(el("tr", {}, ...["단원", "출제 문항", "출제 회차", "회차 출제율", "문항 비율", "회당 배점"].map((h) => el("th", { textContent: h }))));
+  for (const r of data.rows) {
+    table.append(el("tr", {},
+      el("td", { textContent: r.label }), el("td", { className: "num", textContent: r.questions }),
+      el("td", { className: "num", textContent: r.rounds }),
+      el("td", { className: "num", textContent: Math.round(r.appear_rate * 100) + "%" }),
+      el("td", { className: "num", textContent: (r.share * 100).toFixed(1) + "%" }),
+      el("td", { className: "num", textContent: r.points_per_round })));
+  }
+}
+$("anScope").addEventListener("change", loadAnalysis);
+
+// ---- 기출 답안 탭 ----
+let solved = [];
+function renderCard(q) {
+  const card = $("card");
+  card.replaceChildren();
+  card.append(el("div", { className: "meta", textContent: `${q.id} (${q.round}회 ${q.number}번) · ${[q.subject, q.tax, q.unit].filter(Boolean).join(" › ")} · ${q.points}점` }),
+              el("div", { style: "margin:6px 0;font-weight:600", textContent: q.question }));
+  if (q.multi) card.append(el("div", { className: "notice", textContent: "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다." }));
+  const result = el("div");
+  const buttons = q.choices.map((text, i) => {
+    const b = el("button", { className: "choice", textContent: `${["①", "②", "③", "④"][i] || i + 1} ${text}` });
+    b.addEventListener("click", async () => {
+      const { data } = await api("/api/answer", { id: q.id, choice: String(i + 1) });
+      if (data.correct) {
+        b.classList.add("right");
+        buttons.forEach((x) => (x.disabled = true));
+        result.replaceChildren(el("div", { className: "result-right", textContent: `정답입니다. (정답 ${data.answer}번)` }),
+                               el("div", { className: "explain", textContent: data.explanation }));
+      } else {
+        b.classList.add("wrong");
+        b.disabled = true;
+        result.replaceChildren(el("div", { className: "result-wrong", textContent: "오답입니다. 다시 골라 보세요." }));
+      }
+    });
+    return b;
+  });
+  const reveal = el("button", { className: "ghost", textContent: "정답·해설 바로 보기" });
+  reveal.addEventListener("click", async () => {
+    const { data } = await api("/api/reveal", { id: q.id });
+    buttons.forEach((x) => (x.disabled = true));
+    result.replaceChildren(el("div", { className: "result-right", textContent: `정답 ${data.answer}번 (풀이 기록 없이 공개)` }),
+                           el("div", { className: "explain", textContent: data.explanation }));
+  });
+  card.append(...buttons, el("div", { className: "row" }, reveal), result);
+}
+async function loadQuestion(round, number) {
+  const { ok, data } = await api("/api/question?" + query({ round, number }));
+  if (!ok) { $("card").replaceChildren(el("div", { className: "result-wrong", textContent: data.error })); return; }
+  renderCard(data);
+}
+$("lkGo").addEventListener("click", () => loadQuestion($("lkRound").value, $("lkNumber").value));
+$("quizGo").addEventListener("click", async () => {
+  const [subject, tax, unit] = $("quizUnit").value.split("|");
+  const { ok, data } = await api("/api/quiz?" + query({ subject, tax, unit, exclude: solved.join(",") }));
+  if (!ok) { solved = []; $("card").replaceChildren(el("div", { className: "notice", textContent: data.error + " (푼 문제 목록을 비웠습니다. 다시 눌러 주세요.)" })); return; }
+  solved.push(data.id);
+  renderCard(data);
+});
+async function loadUnits() {
+  const { data } = await api("/api/units");
+  $("quizUnit").replaceChildren(el("option", { value: "||", textContent: "전체 단원" }),
+    ...data.units.map((u) => el("option", { value: `${u.subject}|${u.tax}|${u.unit}`, textContent: `${u.label} (${u.count})` })));
+}
+
+// ---- 단어 주석 탭 ----
+function renderAnnotated(pieces, meanings) {
+  const span = el("span");
+  for (const p of pieces) {
+    if (!p.term) { span.append(p.text); continue; }
+    const t = el("span", { className: "term", textContent: p.text });
+    t.addEventListener("click", () => {
+      const box = $("wdMeaning");
+      box.style.display = "block";
+      box.replaceChildren(el("b", { textContent: p.term + " : " }), meanings[p.term]);
+    });
+    span.append(t);
+  }
+  return span;
+}
+$("wdGo").addEventListener("click", async () => {
+  const { ok, data } = await api("/api/annotated?" + query({ round: $("wdRound").value, number: $("wdNumber").value }));
+  const card = $("wdCard");
+  $("wdMeaning").style.display = "none";
+  if (!ok) { card.replaceChildren(el("div", { className: "result-wrong", textContent: data.error })); return; }
+  card.replaceChildren(el("div", { className: "meta", textContent: `${data.id} · ${[data.meta.subject, data.meta.tax, data.meta.unit].filter(Boolean).join(" › ")}` }),
+    el("div", { style: "margin:6px 0;font-weight:600" }, renderAnnotated(data.question, data.meanings)),
+    ...data.choices.map((c, i) => el("div", { style: "margin:3px 0" }, `${["①", "②", "③", "④"][i] || i + 1} `, renderAnnotated(c, data.meanings))));
+});
+async function loadGlossary() {
+  const { data } = await api("/api/glossary?" + query({ q: $("gq").value }));
+  $("gList").replaceChildren(...data.terms.map((t) => el("div", { className: "hit" }, el("b", { textContent: t.term }), " — " + t.meaning)));
+}
+$("gq").addEventListener("input", loadGlossary);
+
+loadAnalysis(); loadUnits(); loadGlossary();
+</script>
+</body>
+</html>
