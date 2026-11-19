@@ -3,6 +3,7 @@
 흐름(한 방향): 질문 글 → extract_terms → 확장 낱말 추가 → 후보 찾기 → 점수 매기기 → 결과 목록.
 3글자 이상 낱말은 FTS5 trigram, 1~2글자(손금·유보 등)는 LIKE 로 찾는다.
 점수 = 낱말 가중치 × 희귀도(idf) × (질문 문장에 나오면 2배). 희귀한 낱말이 많이 맞을수록 위로 온다.
+흔한 낱말(5% 초과 문항)은 점수를 절반으로 줄이고, 1등의 35% 에 못 미치는 결과는 보여 주지 않는다(docs/search_noise.md).
 """
 import json
 import math
@@ -16,6 +17,9 @@ DEFAULT_ROUNDS = None    # 기본 검색 범위: 전체 회차(None). 숫자를 
 RESULT_LIMIT = 5
 EXPANDED_WEIGHT = 1.5    # 사전에서 넓혀 온 공식 용어는 질문에 직접 쓴 낱말보다 믿을 만하다
 STEM_BONUS = 2           # 질문 문장에 낱말이 나오면 점수 2배
+COMMON_DF_RATIO = 0.05   # 범위 안 문항의 5% 보다 많은 문항에 든 낱말은 '흔한 낱말'(항목·대상·적용 등)
+COMMON_DAMP = 0.5        # 흔한 낱말의 점수에 곱하는 값: 흔한 낱말 하나만 맞은 문항이 위로 오는 것을 줄인다
+TAIL_CUT = 0.35          # 1등 점수의 35% 보다 낮은 결과는 뺀다(관련 문항이 적을 때 흔한 낱말로 채워지는 꼬리 제거)
 
 # 낱말 끝에서 떼어 낼 조사·어미(긴 것부터 시도한다).
 ENDINGS = ("이라는데", "라는데", "설명해줘", "알려줘", "해줘", "하면서", "에서는", "으로는", "이라고",
@@ -88,7 +92,9 @@ def _score_rows(conn, weights, ids, rounds):
     """후보 문항에 낱말 희귀도(idf) 가중 점수를 매겨 (점수, 행, 맞은 낱말) 을 점수 내림차순·최근 회차 순으로 돌려준다."""
     total = conn.execute(
         f"SELECT COUNT(*) FROM questions WHERE round IN ({','.join('?' * len(rounds))})", rounds).fetchone()[0]
-    idf = {t: math.log((total + 1) / (_doc_frequency(conn, t, rounds) + 1)) for t in weights}
+    freq = {t: _doc_frequency(conn, t, rounds) for t in weights}
+    idf = {t: math.log((total + 1) / (freq[t] + 1)) * (COMMON_DAMP if freq[t] > COMMON_DF_RATIO * total else 1.0)
+           for t in weights}
     scored = []
     for qid in ids:
         row = conn.execute("SELECT * FROM questions WHERE id = ?", (qid,)).fetchone()
@@ -117,7 +123,9 @@ def search_theory(query, conn, round_limit=DEFAULT_ROUNDS, entries=None, limit=R
         out["note"] = "검색어로 쓸 수 있는 낱말(2글자 이상)이 없습니다."
         return out
     ids = _candidate_ids(conn, list(weights), rounds)
-    for score, row, matched in _score_rows(conn, weights, ids, rounds)[:limit]:
+    scored = _score_rows(conn, weights, ids, rounds)
+    scored = [s for s in scored if s[0] >= TAIL_CUT * scored[0][0]]
+    for score, row, matched in scored[:limit]:
         out["results"].append({
             "id": row["id"], "round": row["round"], "number": row["number"], "subject": row["subject"],
             "tax": row["tax"], "unit": row["unit"], "question": row["question"],
