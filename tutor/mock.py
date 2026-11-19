@@ -17,6 +17,9 @@ PER_SUBJECT = 5
 TAXES = ("부가가치세", "소득세", "법인세")
 TAX_SPLIT = (2, 2, 1)           # 세무 5문항 = 두 세목 2개씩 + 한 세목 1개(어느 세목이 1개인지는 무작위)
 EXAM_SIZE = PER_SUBJECT * len(SUBJECTS)
+# 회차만 다르고 글이 같은 진짜 중복 문항(docs/data_cleanup.md 2절). 한 모의고사에 둘 다 나오지 않게 한다.
+DUPLICATE_PAIRS = (("118-15", "122-13"), ("70-8", "81-8"), ("67-1", "80-4"))
+PARTNER = {a: b for a, b in DUPLICATE_PAIRS} | {b: a for a, b in DUPLICATE_PAIRS}
 
 
 def _draw(conn, where, args, count, solved, rng, taken):
@@ -24,7 +27,13 @@ def _draw(conn, where, args, count, solved, rng, taken):
     rows = [r for r in conn.execute(f"SELECT * FROM questions WHERE {where}", args).fetchall() if r["id"] not in taken]
     rng.shuffle(rows)
     rows.sort(key=lambda r: r["id"] in solved)      # 안정 정렬: 섞인 순서를 유지한 채 맞힌 문항만 뒤로
-    return rows[:count]
+    chosen = []
+    for r in rows:                                   # 앞에서부터 고르되, 이미 고른(이전 묶음 포함) 문항의 중복쌍은 건너뛴다
+        if len(chosen) == count:
+            break
+        if PARTNER.get(r["id"]) not in taken and PARTNER.get(r["id"]) not in {c["id"] for c in chosen}:
+            chosen.append(r)
+    return chosen
 
 
 def pick_exam(conn, rng=random):

@@ -134,3 +134,22 @@ def test_mock_api_flow(tmp_path):
     assert dispatch("GET", "/api/mock/history", {}, {}, conn)[1]["history"][0]["score"] == 2
     small = connect(tmp_path / "small.db")
     assert dispatch("GET", "/api/mock/new", {}, {}, small)[0] == 404
+
+
+def test_true_duplicate_pairs_never_share_one_exam(tmp_path, monkeypatch):
+    conn = bank(tmp_path, rounds=2)                     # 과목당 후보가 적어 중복쌍이 함께 뽑히기 쉽다
+    pairs = (("1-1", "2-1"), ("1-6", "2-6"), ("1-12", "2-12"))
+    both = lambda exam: any({a, b} <= {q["id"] for q in exam} for a, b in pairs)
+    assert any(both(mock.pick_exam(conn, random.Random(s))) for s in range(200))      # 막지 않으면 함께 나온다(시험이 유효함)
+    monkeypatch.setattr(mock, "PARTNER", {a: b for a, b in pairs} | {b: a for a, b in pairs})
+    for seed in range(200):
+        exam = mock.pick_exam(conn, random.Random(seed))
+        assert not both(exam) and len(exam) == 15
+
+
+def test_real_duplicate_pairs_are_the_three_reviewed_in_data_cleanup():
+    from pathlib import Path
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "data_cleanup.md").read_text(encoding="utf-8")
+    assert len(mock.DUPLICATE_PAIRS) == 3
+    for a, b in mock.DUPLICATE_PAIRS:
+        assert f"{a} ~ {b}" in doc and "**같은 문제**" in doc.split(f"{a} ~ {b}")[1].split("\n")[0]
