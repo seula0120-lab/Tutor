@@ -22,7 +22,9 @@ from .sync import format_report, sync_raw
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
 # 주소 → (static 폴더의 파일, 내용 종류). 이 목록에 있는 파일만 내보낸다.
-STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8")}
+STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8"),
+                "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
+FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
 PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html"}
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
@@ -189,6 +191,8 @@ class Handler(BaseHTTPRequestHandler):
         url = urlparse(self.path)
         if url.path in PAGES:
             return self._send_bytes(200, (STATIC_DIR / PAGES[url.path]).read_bytes(), "text/html; charset=utf-8")
+        if url.path.startswith("/static/fonts/") and url.path.rsplit("/", 1)[1] in FONT_FILES:
+            return self._send_bytes(200, (STATIC_DIR / "fonts" / url.path.rsplit("/", 1)[1]).read_bytes(), "font/woff2")
         if url.path in STATIC_FILES:
             return self._send_bytes(200, (STATIC_DIR / STATIC_FILES[url.path][0]).read_bytes(), STATIC_FILES[url.path][1])
         params = {k: v[0] for k, v in parse_qs(url.query).items()}

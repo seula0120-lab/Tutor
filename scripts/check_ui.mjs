@@ -10,9 +10,11 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = join(ROOT, "scratch", "screens");
+const DESIGN_SHOTS = join(SHOTS, "design");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
 mkdirSync(SHOTS, { recursive: true });
+mkdirSync(DESIGN_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
@@ -79,8 +81,15 @@ async function connectPage(port) {
     const r = await send("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(SHOTS, `${String(++shot).padStart(2, "0")}-${name}.png`), Buffer.from(r.data, "base64"));
   };
+  const shotTo = async (name) => {                                  // 디자인 스크린샷: scratch/screens/design/<이름>.png
+    const r = await send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(join(DESIGN_SHOTS, `${name}.png`), Buffer.from(r.data, "base64"));
+    return `${name}.png`;
+  };
+  const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: 9 }); };
+  const emulate = (features) => send("Emulation.setEmulatedMedia", { features });      // 예: [{name:"prefers-color-scheme", value:"dark"}]
   const viewport = (width, height, mobile) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
-  return { evaluate, waitFor, goto, screenshot, viewport, errors };
+  return { evaluate, waitFor, goto, screenshot, shotTo, emulate, key, viewport, errors };
 }
 
 // 128회 1번 같은 문항의 정답 번호(들): 로컬 기출 파일에서 읽는다(화면에는 풀기 전에 정답이 없으므로 점검 스크립트만 안다).
@@ -200,16 +209,154 @@ async function main() {
     if ((await overflow()) > 0) bad.push("/toc");
     await page.screenshot("mobile-toc");
     await page.goto(base + "/");
-    for (const tab of ["analysis", "answers", "words", "notebook", "mock"]) {
+    for (const tab of ["ask", "analysis", "answers", "words", "notebook", "mock"]) {
       await page.evaluate(`document.querySelector('.tab[data-tab="${tab}"]').click(); true`);
       await sleep(400);
       if ((await overflow()) > 0) bad.push(`홈/${tab}`);
     }
-    await page.evaluate(`document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
+    await page.evaluate(`document.querySelector('.tab[data-tab="ask"]').click(); document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
     await page.waitFor(`document.getElementById('answer').textContent.includes('주제 요약 카드')`, "요약 카드(모바일)");
     if ((await overflow()) > 0) bad.push("홈/요약 카드");
     await page.screenshot("mobile-summary");
     assert(!bad.length, "가로로 넘치는 화면: " + bad.join(", "));
+  });
+
+
+  // ---- 디자인 점검: 토큰·접근성·화면별 스크린샷(라이트/다크/모바일) ----
+  const contrast = (a, b) => {
+    const lum = (hex) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const tokens = () => page.evaluate(`(() => { const s = getComputedStyle(document.documentElement); const o = {};
+    for (const n of ["bg","surface","paper","note","text","muted","accent","on-accent","ok","ok-soft","bad","bad-soft","warn","warn-soft","accent-soft","mark","mark-text"]) o[n] = s.getPropertyValue("--" + n).trim(); return o; })()`);
+  const bodyBg = () => page.evaluate(`getComputedStyle(document.body).backgroundColor`);
+  const tab = (name) => page.evaluate(`document.querySelector('.tab[data-tab="${name}"]').click(); true`);
+
+  await scenario("theme.css 토큰: 라이트·다크 팔레트와 글 대비 AA(4.5:1)", async () => {
+    await page.viewport(1100, 900, false);
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.goto(base + "/");
+    const light = await tokens();
+    assert(light.bg.toUpperCase() === "#F5F6F8" && light.accent.toUpperCase() === "#4F46E5", "라이트 팔레트 값이 다름");
+    assert((await bodyBg()) === "rgb(245, 246, 248)", "라이트 바탕색이 적용되지 않음");
+    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    const dark = await tokens();
+    assert(dark.bg.toUpperCase() === "#0F1115" && dark.accent.toUpperCase() === "#8B87FF", "다크 팔레트 값이 다름");
+    assert((await bodyBg()) === "rgb(15, 17, 21)", "다크 바탕색이 적용되지 않음");
+    const bad = [];
+    for (const [label, t] of [["라이트", light], ["다크", dark]]) {
+      for (const [fg, bg] of [["text", "bg"], ["text", "surface"], ["text", "paper"], ["text", "note"], ["muted", "bg"], ["muted", "surface"], ["accent", "surface"], ["accent", "bg"], ["on-accent", "accent"],
+                              ["ok", "ok-soft"], ["bad", "bad-soft"], ["warn", "warn-soft"], ["text", "accent-soft"], ["mark-text", "mark"], ["ok", "surface"], ["bad", "surface"]]) {
+        const ratio = contrast(t[fg], t[bg]);
+        if (ratio < 4.5) bad.push(`${label} ${fg}/${bg} ${ratio.toFixed(2)}`);
+      }
+    }
+    assert(!bad.length, "대비 부족: " + bad.join(", "));
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+  });
+
+  await scenario("공통 구조: 고정 상단 바·알약 탭 순서·글꼴·세 화면이 theme.css 사용", async () => {
+    await page.goto(base + "/");
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.topbar')).position`)) === "sticky", "상단 바가 sticky 가 아님");
+    const labels = await page.evaluate(`[...document.querySelectorAll('.topbar .tabs > *')].map((n) => n.textContent.trim())`);
+    const order = ["질문", "기출 답안", "오답노트", "모의고사", "문제 분석"];
+    assert(order.every((l, i) => labels[i] === l) && labels[labels.length - 1] === "목차", "탭 순서가 다름: " + labels.join(" · "));
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tab')).borderRadius`)) === "999px", "알약 모양이 아님");
+    await page.waitFor(`Promise.all([document.fonts.load('16px Pretendard', '가'), document.fonts.load('600 16px "Noto Serif KR"', '가')]).then((r) => r.every((x) => x.length > 0))`, "번들 글꼴 로드");
+    for (const path of ["/", "/toc", "/glossary-review"]) {
+      await page.goto(base + path);
+      assert(await page.evaluate(`!!document.querySelector('link[href="/static/theme.css"]') && !!document.querySelector('.topbar')`), `${path} 가 theme.css·상단 바를 쓰지 않음`);
+    }
+    const css = await (await fetch(base + "/static/fonts/PretendardVariable.woff2")).arrayBuffer();
+    assert(css.byteLength > 100000, "글꼴 파일을 받지 못함");
+  });
+
+  await scenario("시험지 카드: OMR 보기·오답 잠금 표시·주황 개정 배지", async () => {
+    await page.goto(base + "/");
+    await lookup(page, 128, 3);
+    const style = await page.evaluate(`(() => { const o = document.querySelector('#card .omr'); const stem = document.querySelector('#card .stem');
+      return { radius: getComputedStyle(o).borderRadius, serif: getComputedStyle(stem).fontFamily, paper: document.getElementById('card').classList.contains('paper') }; })()`);
+    assert(style.paper && style.radius === "50%" && style.serif.includes("Noto Serif KR"), "시험지 카드/OMR 모양이 아님: " + JSON.stringify(style));
+    await page.evaluate(`const flag = document.createElement('span'); flag.className = 'taxflag'; flag.id = 'probe'; flag.textContent = '테스트'; document.getElementById('card').append(flag); true`);
+    const orange = await page.evaluate(`(() => { const c = getComputedStyle(document.getElementById('probe')).color.match(/\\d+/g).map(Number); return c[0] > c[2] + 60 && c[0] > 120; })()`);
+    assert(orange, "세법 개정 배지가 주황 계열이 아님");
+  });
+
+  await scenario("모의고사 2단: 넓은 화면은 문제지+고정 OMR, 좁은 화면은 하단 바", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/"); await tab("mock");
+    await tab("mock");
+    await page.evaluate(`document.getElementById('mockStart').click(); true`);
+    await page.waitFor(`document.querySelectorAll('#mockBody .hit').length === 15 && document.querySelectorAll('.omr-table tr').length === 15`, "문제지·OMR");
+    const wide = await page.evaluate(`(() => { const a = document.querySelector('.sheet').getBoundingClientRect(), b = document.querySelector('.omr-panel').getBoundingClientRect();
+      return { side: b.left > a.right - 1, sticky: getComputedStyle(document.querySelector('.omr-panel')).position }; })()`);
+    assert(wide.side && wide.sticky === "sticky", "2단/고정 OMR 아님: " + JSON.stringify(wide));
+    await page.evaluate(`document.querySelectorAll('.omr-table tr')[2].querySelectorAll('button')[1].click(); true`);
+    assert(await page.evaluate(`document.querySelectorAll('#mockBody .hit')[2].querySelectorAll('.choice')[1].classList.contains('picked') && document.querySelector('.omr-progress').textContent.startsWith('1 / 15')`), "OMR 칸을 눌러도 문제지에 반영되지 않음");
+    await page.viewport(390, 844, true);
+    const narrow = await page.evaluate(`(() => { const p = document.querySelector('.omr-panel'); const r = p.getBoundingClientRect();
+      return { fixed: getComputedStyle(p).position, bottom: Math.round(innerHeight - r.bottom), submit: document.getElementById('mockSubmit').getBoundingClientRect().height > 0 }; })()`);
+    assert(narrow.fixed === "fixed" && narrow.bottom === 0 && narrow.submit, "하단 바가 아님: " + JSON.stringify(narrow));
+    assert((await page.evaluate(`document.documentElement.scrollWidth - document.documentElement.clientWidth`)) <= 0, "모의고사 화면이 가로로 넘침");
+    await page.viewport(1100, 900, false);
+  });
+
+  await scenario("요약 카드: ✔/✘ 묶음과 형광펜", async () => {
+    await page.goto(base + "/");
+    await page.evaluate(`document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
+    await page.waitFor(`document.querySelector('#answer .card mark')`, "형광펜 칠한 핵심어");
+    const marks = await page.evaluate(`({ ok: getComputedStyle(document.querySelector('.okc h3'), '::before').content, trap: getComputedStyle(document.querySelector('.trap h3'), '::before').content,
+      bg: getComputedStyle(document.querySelector('#answer .card mark')).backgroundColor, note: getComputedStyle(document.querySelector('#answer .card')).borderLeftWidth })`);
+    assert(marks.ok.includes("✔") && marks.trap.includes("✘") && marks.bg !== "rgba(0, 0, 0, 0)" && marks.note === "6px", "요약 카드 모양이 다름: " + JSON.stringify(marks));
+  });
+
+  await scenario("접근성: 키보드 초점 링·움직임 줄이기·다크에서도 가로 스크롤 없음", async () => {
+    await page.goto(base + "/");
+    await page.evaluate(`document.getElementById('q').focus(); true`);
+    await page.key("Tab");                                              // 진짜 키보드 입력이어야 :focus-visible 이 켜진다
+    const ring = await page.evaluate(`(() => { const b = document.activeElement; const s = getComputedStyle(b); return { tag: b.id, width: s.outlineWidth, style: s.outlineStyle }; })()`);
+    assert(ring.style !== "none" && parseFloat(ring.width) >= 2, "초점 링이 보이지 않음: " + JSON.stringify(ring));
+    await page.emulate([{ name: "prefers-reduced-motion", value: "reduce" }]);
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tab')).transitionDuration`)).split(",").every((v) => parseFloat(v) === 0), "움직임 줄이기에서 전환이 남아 있음");
+    await page.emulate([{ name: "prefers-reduced-motion", value: "no-preference" }, { name: "prefers-color-scheme", value: "dark" }]);
+    await page.viewport(390, 844, true);
+    const bad = [];
+    for (const path of ["/", "/toc", "/glossary-review"]) {
+      await page.goto(base + path);
+      await sleep(300);
+      if ((await page.evaluate(`document.documentElement.scrollWidth - document.documentElement.clientWidth`)) > 0) bad.push(path);
+    }
+    assert(!bad.length, "다크 390px 에서 가로로 넘치는 화면: " + bad.join(", "));
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(1100, 900, false);
+  });
+
+  const designFiles = [];
+  const screens = {
+    "질문-요약카드": async () => { await page.goto(base + "/"); await page.evaluate(`document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`); await page.waitFor(`document.querySelector('#answer .card mark')`, "요약 카드"); },
+    "기출답안-오답잠금": async () => { await page.goto(base + "/"); await lookup(page, 128, 4); await page.evaluate(`document.querySelector('#card .choice').click(); true`); await page.waitFor(`document.getElementById('card').textContent.includes('오답입니다.') || document.querySelector('#card .explain')`, "채점 결과"); },
+    "오답노트": async () => { await page.goto(base + "/"); await tab("notebook"); await page.waitFor(`document.querySelectorAll('#nbList .hit').length > 0`, "오답노트 목록").catch(async (e) => { throw new Error(e.message + " " + await page.evaluate(`location.href + ' | ' + document.querySelector('.tab.active').textContent + ' | ' + document.getElementById('nbList').textContent.slice(0, 80)`)); }); },
+    "모의고사-OMR": async () => { await page.goto(base + "/"); await tab("mock"); await page.evaluate(`document.getElementById('mockStart').click(); true`); await page.waitFor(`document.querySelectorAll('#mockBody .hit').length === 15`, "모의고사");
+      await page.evaluate(`document.querySelectorAll('#mockBody .hit').forEach((h, i) => { if (i < 6) h.querySelectorAll('.choice')[i % 4].click(); }); true`); },
+    "문제분석": async () => { await page.goto(base + "/"); await tab("analysis"); await page.waitFor(`document.querySelectorAll('#anTable tr').length > 3`, "분석 표"); },
+    "단어주석": async () => { await page.goto(base + "/"); await tab("words"); await page.evaluate(`document.getElementById('wdRound').value = '128'; document.getElementById('wdNumber').value = '1'; document.getElementById('wdGo').click(); true`); await page.waitFor(`document.querySelector('#wdCard .term')`, "용어"); await page.evaluate(`document.querySelector('#wdCard .term').click(); true`); await sleep(200); },
+    "목차": async () => { await page.goto(base + "/toc"); await page.waitFor(`document.querySelectorAll('details.subject').length === 3`, "목차"); await page.evaluate(`document.querySelector('details.subject').open = true; document.querySelector('details.subject details').open = true; document.querySelector('details.subject details .qrow').click(); true`); await page.waitFor(`document.querySelector('details.subject details .slot .choice')`, "카드"); },
+    "용어검토": async () => { await page.goto(base + "/glossary-review"); await page.waitFor(`document.querySelectorAll('#rows tr').length > 10`, "용어 표"); },
+  };
+  await scenario("화면별 스크린샷(라이트·다크·모바일)이 저장된다", async () => {
+    for (const [variant, scheme, width, height, mobile] of [["light", "light", 1100, 900, false], ["dark", "dark", 1100, 900, false], ["mobile", "light", 390, 844, true]]) {
+      await page.viewport(width, height, mobile);
+      await page.emulate([{ name: "prefers-color-scheme", value: scheme }]);
+      for (const [name, setup] of Object.entries(screens)) {
+        await setup();
+        await sleep(250);
+        designFiles.push(await page.shotTo(`${name}-${variant}`));
+      }
+    }
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(1100, 900, false);
+    assert(designFiles.length === 24, "스크린샷 24장이 아님");
   });
 
   await scenario("콘솔 오류가 없다", async () => {

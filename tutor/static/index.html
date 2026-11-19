@@ -4,57 +4,27 @@
 <meta charset="utf-8">
 <title>전산세무 1급 이론 튜터</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; max-width: 920px; margin: 24px auto; padding: 0 16px; color: #1d2433; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .sub { color: #5b6577; font-size: 13px; margin-bottom: 16px; }
-  .box { border: 1px solid #d5dae3; border-radius: 10px; padding: 14px; margin-bottom: 16px; background: #fff; }
-  textarea, input, select, button { font: inherit; }
-  textarea { width: 100%; box-sizing: border-box; min-height: 60px; padding: 8px; border: 1px solid #b9c1d0; border-radius: 6px; }
-  button { padding: 6px 14px; border: 1px solid #2b5fd9; background: #2b5fd9; color: #fff; border-radius: 6px; cursor: pointer; }
-  button.ghost { background: #fff; color: #2b5fd9; }
-  button:disabled { opacity: .5; cursor: default; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-  .notice { font-size: 12px; color: #6b5200; background: #fff6d6; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
-  .tabs { display: flex; gap: 4px; margin-bottom: 0; }
-  .tab { border: 1px solid #d5dae3; border-bottom: none; border-radius: 8px 8px 0 0; background: #eef1f6; color: #1d2433; padding: 8px 16px; }
-  .tab.active { background: #fff; font-weight: 700; color: #2b5fd9; }
-  .panel { display: none; border: 1px solid #d5dae3; border-radius: 0 10px 10px 10px; padding: 14px; background: #fff; }
-  .panel.active { display: block; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; }
-  th, td { border-bottom: 1px solid #e3e7ee; padding: 5px 6px; text-align: left; }
-  th { background: #f4f6fa; }
-  td.num { text-align: right; }
-  .hit { border-bottom: 1px solid #e3e7ee; padding: 8px 0; }
-  .meta { font-size: 12px; color: #5b6577; }
-  .choice { display: block; width: 100%; text-align: left; margin: 4px 0; background: #fff; color: #1d2433; border: 1px solid #b9c1d0; }
-  .choice.wrong { background: #ffe4e4; border-color: #d33; }
-  .choice.right { background: #dff5e3; border-color: #2a9d4b; }
-  .result-wrong { color: #c22; font-weight: 700; margin-top: 6px; }
-  .result-right { color: #1f7a3c; font-weight: 700; margin-top: 6px; }
-  .explain { background: #f1f6ff; border-radius: 6px; padding: 8px 10px; margin-top: 8px; white-space: pre-wrap; }
-  .term { border-bottom: 2px solid #e08a00; cursor: pointer; }
-  .meaning { background: #fff6d6; border-radius: 6px; padding: 8px 10px; margin-top: 8px; display: none; }
-  .ai { background: #f6f1ff; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin-top: 8px; }
-  .small { font-size: 12px; color: #5b6577; }
-  .chip { padding: 2px 8px; font-size: 12px; margin: 2px 2px 2px 0; }
-  .choice.picked { background: #e3ecff; border-color: #2b5fd9; }
-  .card { border: 2px solid #2b5fd9; border-radius: 10px; padding: 10px 12px; margin-top: 10px; background: #f7faff; }
-  .card h3 { margin: 8px 0 4px; font-size: 14px; }
-  .card ul { margin: 2px 0 6px; padding-left: 20px; }
-  .card li { margin: 3px 0; font-size: 13px; }
-  .src { color: #5b6577; font-size: 12px; }
-  .trap h3 { color: #b3261e; }
-  .okc h3 { color: #1f7a3c; }
-  .taxflag { display: inline-block; font-size: 12px; color: #8a4b00; background: #ffe9cc; border-radius: 4px; padding: 1px 6px; margin: 2px 0; }
-</style>
+<link rel="stylesheet" href="/static/theme.css">
 </head>
 <body>
+<header class="topbar"><div class="topbar-inner">
+  <a class="brand" href="/">회계튜터<small>전산세무 1급 이론</small></a>
+  <nav class="tabs" aria-label="화면 이동">
+    <button class="tab active" data-tab="ask">질문</button>
+    <button class="tab" data-tab="answers">기출 답안</button>
+    <button class="tab" data-tab="notebook">오답노트</button>
+    <button class="tab" data-tab="mock">모의고사</button>
+    <button class="tab" data-tab="analysis">문제 분석</button>
+    <button class="tab" data-tab="words">단어 주석</button>
+    <a class="tab-link" href="/toc">목차</a>
+  </nav>
+</div></header>
+<main>
+<div id="ask-panel" class="panel active">
 <h1>전산세무 1급 이론 튜터</h1>
-<div class="sub">이론 30점 영역 · 기출 문항 검색과 공식 해설 · 로컬(127.0.0.1)에서만 동작 · <a id="tocLink" href="/toc">문제 목차 보기</a> · <a id="glossaryReviewLink" href="/glossary-review">용어 사전 검토</a></div>
-
-<div class="box">
-  <textarea id="q" placeholder="궁금한 것을 물어보세요. 예: 자기주식은 어떻게 처리해? / 수출하면 부가세가 0%라는데 무슨 뜻이야?"></textarea>
+<div class="sub">이론 30점 영역 · 기출 문항 검색과 공식 해설 · 로컬(127.0.0.1)에서만 동작 · <a id="glossaryReviewLink" href="/glossary-review">용어 사전 검토</a></div>
+<div>
+  <textarea id="q" aria-label="질문" placeholder="궁금한 것을 물어보세요. 예: 자기주식은 어떻게 처리해? / 수출하면 부가세가 0%라는데 무슨 뜻이야?"></textarea>
   <div class="row">
     <button id="ask">질문하기</button>
     <label class="small">검색 범위
@@ -66,16 +36,9 @@
   <div class="small" style="margin-top:6px">요약 카드는 API 키 없이 동작합니다. API 키가 있으면 카드의 문장 모음이 Anthropic API 로 전송되어 3~5줄 설명이 덧붙고, 사용량에 따라 비용이 듭니다.</div>
   <div id="answer"></div>
 </div>
-
-<div class="tabs">
-  <button class="tab active" data-tab="analysis">문제 분석</button>
-  <button class="tab" data-tab="answers">기출 답안</button>
-  <button class="tab" data-tab="words">단어 주석</button>
-  <button class="tab" data-tab="notebook">오답노트</button>
-  <button class="tab" data-tab="mock">모의고사</button>
 </div>
 
-<div id="analysis" class="panel active">
+<div id="analysis" class="panel">
   <div class="row" style="margin-top:0">
     <label class="small">범위 <select id="anScope"><option value="10">최신 10회분</option><option value="all">전체 회차</option></select></label>
     <span id="anInfo" class="small"></span>
@@ -137,12 +100,14 @@
   <table id="mockHistory"></table>
 </div>
 
+</main>
 <script src="/static/quizcard.js"></script>
 <script>
 // ---- 탭 ----
 document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
-  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.tab));
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.tab || p.id === tab.dataset.tab + "-panel"));
+  history.replaceState(null, "", "#" + tab.dataset.tab);
 }));
 function showTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
 
@@ -236,7 +201,7 @@ function sentenceList(items) {
   if (!items.length) return el("div", { className: "small", textContent: "해당 문장이 없습니다." });
   const ul = el("ul");
   for (const it of items) {
-    const li = el("li", {}, it.text + " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""} · 핵심어 ${it.matched.join(", ")})` }));
+    const li = el("li", {}, ...highlight(it.text, it.matched), " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""} · 핵심어 ${it.matched.join(", ")})` }));
     if (it.tax_notice) li.append(" ", el("span", { className: "taxflag", textContent: it.tax_notice }));
     ul.append(li);
   }
@@ -289,7 +254,10 @@ async function loadAnalysis() {
       el("td", { className: "num", textContent: r.points_per_round })));
   }
 }
-$("anScope").addEventListener("change", () => { loadAnalysis(); loadStudyOrder(); });
+$("anScope").addEventListener("change", () => { function tabFromHash() { if (document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`)) showTab(location.hash.slice(1)); }   // 다른 화면의 탭 링크(/#answers 등)
+tabFromHash();
+window.addEventListener("hashchange", tabFromHash);
+loadAnalysis(); loadStudyOrder(); });
 
 async function loadStudyOrder() {
   const { data } = await api("/api/study_order?" + query({ scope: $("anScope").value }));
@@ -394,21 +362,33 @@ $("mockStart").addEventListener("click", async () => {
   if (!ok) { $("mockBody").replaceChildren(el("div", { className: "notice", textContent: data.error })); return; }
   mockAnswers = {};
   const ids = data.questions.map((q) => q.id);
-  const box = el("div");
+  const sheet = el("div", { className: "sheet" });
+  const bubbles = [];                                          // 문항별 OMR 칸 4개
+  const progress = el("div", { className: "omr-progress", ariaLive: "polite" });
+  const refresh = () => {
+    ids.forEach((id, n) => bubbles[n].forEach((b, i) => b.classList.toggle("on", mockAnswers[id] === String(i + 1))));
+    progress.textContent = `${Object.keys(mockAnswers).length} / ${ids.length} 문항 답함`;
+  };
   data.questions.forEach((q, n) => {
-    const item = el("div", { className: "hit" }, el("div", { className: "meta", textContent: `${n + 1}번 · ${q.subject}${q.tax ? " › " + q.tax : ""}` }),
-                    el("div", { style: "font-weight:600;margin:4px 0", textContent: q.question }));
+    const item = el("div", { className: "hit", id: `mq-${n + 1}` }, el("div", { className: "meta", textContent: `${n + 1}번 · ${q.subject}${q.tax ? " › " + q.tax : ""}` }),
+                    el("div", { className: "stem", textContent: q.question }));
     for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) item.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
     const buttons = q.choices.map((text, i) => {
-      const b = el("button", { className: "choice", textContent: `${CIRCLES[i]} ${text}` });
+      const b = choiceButton(i, text);
       b.addEventListener("click", () => {                       // 제출 전에는 고르기만 한다(채점·정답 표시 없음)
         mockAnswers[q.id] = String(i + 1);
         buttons.forEach((x) => x.classList.toggle("picked", x === b));
+        refresh();
       });
       return b;
     });
+    bubbles.push(q.choices.map((_, i) => {
+      const dot = el("button", { className: "omr-bubble", textContent: String(i + 1), ariaLabel: `${n + 1}번 문항 ${i + 1}번 보기` });
+      dot.addEventListener("click", () => buttons[i].click());
+      return dot;
+    }));
     item.append(...buttons);
-    box.append(item);
+    sheet.append(item);
   });
   const submit = el("button", { id: "mockSubmit", textContent: "제출하고 채점하기" });
   submit.addEventListener("click", async () => {
@@ -418,7 +398,9 @@ $("mockStart").addEventListener("click", async () => {
     loadStudyOrder();
     loadMockHistory(res.data.history);
   });
-  box.append(el("div", { className: "row" }, submit));
+  const omr = el("table", { className: "omr-table" }, ...ids.map((_, n) => el("tr", {}, el("th", { textContent: n + 1, scope: "row" }), ...bubbles[n].map((b) => el("td", {}, b)))));
+  const box = el("div", { className: "mock-layout" }, sheet, el("aside", { className: "omr-panel" }, el("div", { className: "omr-title", textContent: "OMR 답안카드" }), omr, progress, submit));
+  refresh();
   $("mockBody").replaceChildren(box);
 });
 function renderMockResult(r) {

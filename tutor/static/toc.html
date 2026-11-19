@@ -4,37 +4,18 @@
 <meta charset="utf-8">
 <title>문제 목차 · 전산세무 1급 이론</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; max-width: 920px; margin: 24px auto; padding: 0 16px; color: #1d2433; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .small, .meta { font-size: 12px; color: #5b6577; }
-  details { border: 1px solid #d5dae3; border-radius: 8px; margin: 6px 0; padding: 6px 10px; background: #fff; }
-  details.subject > summary { font-weight: 700; font-size: 16px; }
-  summary { cursor: pointer; }
-  .qrow { display: block; width: 100%; text-align: left; background: #fff; color: #1d2433; border: none; border-bottom: 1px solid #eef1f6; padding: 6px 2px; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
-  .qrow:hover { background: #f4f6fa; }
-  .slot { border-left: 3px solid #2b5fd9; margin: 4px 0 8px 8px; padding: 6px 10px; background: #f9fbff; }
-  textarea, input, select, button { font: inherit; }
-  button { padding: 6px 14px; border: 1px solid #2b5fd9; background: #2b5fd9; color: #fff; border-radius: 6px; cursor: pointer; }
-  button.ghost { background: #fff; color: #2b5fd9; }
-  button:disabled { opacity: .5; cursor: default; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
-  .choice { display: block; width: 100%; text-align: left; margin: 4px 0; background: #fff; color: #1d2433; border: 1px solid #b9c1d0; }
-  .choice.wrong { background: #ffe4e4; border-color: #d33; }
-  .choice.right { background: #dff5e3; border-color: #2a9d4b; }
-  .result-wrong { color: #c22; font-weight: 700; margin-top: 6px; }
-  .result-right { color: #1f7a3c; font-weight: 700; margin-top: 6px; }
-  .explain { background: #f1f6ff; border-radius: 6px; padding: 8px 10px; margin-top: 8px; white-space: pre-wrap; }
-  .notice { font-size: 12px; color: #6b5200; background: #fff6d6; border-radius: 6px; padding: 6px 8px; margin-top: 8px; }
-  .taxflag { display: inline-block; font-size: 12px; color: #8a4b00; background: #ffe9cc; border-radius: 4px; padding: 1px 6px; margin: 2px 0; }
-</style>
+<link rel="stylesheet" href="/static/theme.css">
 </head>
 <body>
+<div id="topbar"></div>
+<main>
 <h1>문제 목차</h1>
-<div class="small"><a href="/">← 질문·퀴즈 화면</a> · 전체 회차 이론 문항을 과목 › 단원으로 묶었습니다. 문제 줄을 누르면 그 자리에서 풀 수 있고, 정답은 풀기 전에는 보이지 않습니다.</div>
+<div class="small">전체 회차 이론 문항을 과목 › 단원으로 묶었습니다. 문제 줄을 누르면 그 자리에서 풀 수 있고, 정답은 풀기 전에는 보이지 않습니다.</div>
 <div id="toc" style="margin-top:12px"></div>
+</main>
 <script src="/static/quizcard.js"></script>
 <script>
+$("topbar").replaceWith(renderTopbar("toc"));
 (async () => {
   const { data } = await api("/api/toc");
   const root = $("toc");

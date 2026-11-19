@@ -6,9 +6,19 @@
   HTML 이 중간에 끊기거나 데이터가 마크업으로 해석되지 않게 한다.
 """
 import json
+import re
+from pathlib import Path
 
 from .quiz import explanation_of, public_question
 from .toc import SUBJECT_ORDER
+
+THEME_PATH = Path(__file__).resolve().parent / "static" / "theme.css"
+
+
+def inline_theme():
+    """화면과 같은 theme.css 를 파일 안에 그대로 넣는다. 글꼴 파일은 부를 수 없으니 @font-face 는 빼고 시스템 글꼴로 대체한다."""
+    return re.sub(r"@font-face\s*\{[^}]*\}", "", THEME_PATH.read_text(encoding="utf-8"))
+
 
 EXPORT_NAME = "회계튜터_목차.html"
 
@@ -40,24 +50,7 @@ PAGE = """<!doctype html>
 <title>회계튜터 문제 목차 (오프라인)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body { font-family: -apple-system, "Apple SD Gothic Neo", sans-serif; max-width: 920px; margin: 24px auto; padding: 0 16px; color: #1d2433; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .small { font-size: 12px; color: #5b6577; }
-  .offline { background: #fff6d6; color: #6b5200; border-radius: 6px; padding: 8px 10px; margin: 8px 0; font-size: 13px; }
-  details { border: 1px solid #d5dae3; border-radius: 8px; margin: 6px 0; padding: 6px 10px; }
-  details.subject > summary { font-weight: 700; font-size: 16px; }
-  summary { cursor: pointer; }
-  .qrow { display: block; width: 100%; text-align: left; background: #fff; color: #1d2433; border: none; border-bottom: 1px solid #eef1f6; padding: 6px 2px; font: inherit; cursor: pointer; overflow-wrap: anywhere; }
-  .slot { border-left: 3px solid #2b5fd9; margin: 4px 0 8px 8px; padding: 6px 10px; background: #f9fbff; }
-  .choice { margin: 4px 0; padding: 6px 8px; border: 1px solid #b9c1d0; border-radius: 6px; }
-  .choice.right { background: #dff5e3; border-color: #2a9d4b; }
-  .choice.wrong { background: #ffe4e4; border-color: #d33; }
-  .choice:disabled { cursor: default; }
-  .ok { color: #1f7a3c; font-weight: 700; margin-top: 6px; }
-  .bad { color: #c22; font-weight: 700; margin-top: 6px; }
-  .explain { background: #f1f6ff; border-radius: 6px; padding: 8px 10px; margin-top: 8px; white-space: pre-wrap; }
-  .ghost { background: #fff; color: #2b5fd9; border: 1px solid #2b5fd9; border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; }
-  .taxflag { display: inline-block; font-size: 12px; color: #8a4b00; background: #ffe9cc; border-radius: 4px; padding: 1px 6px; }
+__THEME__
 </style>
 </head>
 <body>
@@ -93,7 +86,7 @@ PAGE = """<!doctype html>
             if (accepted.length > 1) slot.appendChild(el("div", "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다.", "small"));
             var result = el("div");
             var buttons = q.choices.map(function (c, i) {
-              var b = el("button", "①②③④".charAt(i) + " " + c, "choice");
+              var b = el("button", null, "choice"); b.appendChild(el("span", "①②③④".charAt(i), "omr")); b.appendChild(el("span", c, "ctext"));
               b.addEventListener("click", function () {
                 buttons.forEach(function (x) { x.disabled = true; });          // 누르는 즉시 잠근다(오답이면 그대로 끝)
                 result.textContent = "";
@@ -138,4 +131,4 @@ PAGE = """<!doctype html>
 
 
 def render_html(conn):
-    return PAGE.replace("__DATA__", safe_json(export_data(conn)))
+    return PAGE.replace("__THEME__", inline_theme()).replace("__DATA__", safe_json(export_data(conn)))

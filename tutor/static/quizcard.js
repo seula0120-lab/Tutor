@@ -16,16 +16,53 @@ const query = (obj) => new URLSearchParams(Object.entries(obj).filter(([, v]) =>
 const CIRCLES = ["①", "②", "③", "④"];
 const pathOf = (q) => [q.subject, q.tax, q.unit].filter(Boolean).join(" › ");
 
+// OMR 마킹 모양의 보기 버튼: 동그라미 번호 + 글. 글 전체가 하나의 버튼이다.
+function choiceButton(i, text) {
+  return el("button", { className: "choice" }, el("span", { className: "omr", ariaHidden: "true", textContent: CIRCLES[i] || String(i + 1) }), el("span", { className: "ctext", textContent: text }));
+}
+
+// 위쪽 고정 바와 알약 탭. 홈 화면은 자체 탭(button)을 쓰고, 다른 화면은 이 함수가 링크 탭을 그린다. active: 켜 둘 탭 이름.
+const TABS = [["ask", "질문"], ["answers", "기출 답안"], ["notebook", "오답노트"], ["mock", "모의고사"], ["analysis", "문제 분석"], ["words", "단어 주석"], ["toc", "목차"]];
+function renderTopbar(active) {
+  const links = TABS.map(([name, label]) => el("a", { className: "tab-link" + (name === active ? " active" : ""), href: name === "toc" ? "/toc" : `/#${name}`, textContent: label }));
+  return el("header", { className: "topbar" }, el("div", { className: "topbar-inner" },
+    el("a", { className: "brand", href: "/", textContent: "회계튜터" }, el("small", { textContent: " 전산세무 1급 이론" })), el("nav", { className: "tabs", ariaLabel: "화면 이동" }, ...links)));
+}
+
+// 글 속의 핵심어를 형광펜(<mark>)으로 칠한 조각들을 돌려준다. 긴 핵심어부터 찾고 겹치는 곳은 칠하지 않는다.
+function highlight(text, words) {
+  const keys = [...new Set((words || []).filter((w) => w))].sort((a, b) => b.length - a.length);
+  if (!keys.length) return [document.createTextNode(text)];
+  const spans = [];
+  for (const k of keys) {
+    for (let at = text.indexOf(k); at !== -1; at = text.indexOf(k, at + k.length)) {
+      if (!spans.some(([s, e]) => at < e && at + k.length > s)) spans.push([at, at + k.length]);
+    }
+  }
+  spans.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  let pos = 0;
+  for (const [s, e] of spans) {
+    if (s > pos) out.push(document.createTextNode(text.slice(pos, s)));
+    out.push(el("mark", { textContent: text.slice(s, e) }));
+    pos = e;
+  }
+  if (pos < text.length) out.push(document.createTextNode(text.slice(pos)));
+  return out;
+}
+
 // q: 공개용 문항(정답 없음). container: 카드를 그릴 요소. onResult({kind: "correct"|"wrong"|"seen", id}): 결과가 나왔을 때 부른다.
 function renderCard(q, container, onResult = () => {}) {
   container.replaceChildren();
+  container.classList.add("paper");                          // 시험지 카드 모양(theme.css)
+  container.classList.remove("locked");
   container.append(el("div", { className: "meta", textContent: `${q.id} (${q.round}회 ${q.number}번) · ${pathOf(q)} · ${q.points}점` }),
-                   el("div", { style: "margin:6px 0;font-weight:600", textContent: q.question }));
+                   el("div", { className: "stem", textContent: q.question }));
   for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) container.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
   if (q.multi) container.append(el("div", { className: "notice", textContent: "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다." }));
   const result = el("div");
   const buttons = q.choices.map((text, i) => {
-    const b = el("button", { className: "choice", textContent: `${CIRCLES[i] || i + 1} ${text}` });
+    const b = choiceButton(i, text);
     b.addEventListener("click", async () => {
       buttons.forEach((x) => (x.disabled = true));        // 누르는 즉시 잠가 연타를 막는다(오답이면 그대로 잠긴 채 끝)
       const { data } = await api("/api/answer", { id: q.id, choice: String(i + 1) });
@@ -36,7 +73,8 @@ function renderCard(q, container, onResult = () => {}) {
         onResult({ kind: "correct", id: q.id });
       } else {
         b.classList.add("wrong");
-        result.replaceChildren(el("div", { className: "result-wrong", textContent: "오답입니다." }));
+        container.classList.add("locked");                   // 오답: 보기를 모두 잠근다
+        result.replaceChildren(el("div", { className: "result-wrong" }, el("span", { className: "lock", ariaHidden: "true", textContent: "🔒" }), "오답입니다."));
         onResult({ kind: "wrong", id: q.id });
       }
     });
