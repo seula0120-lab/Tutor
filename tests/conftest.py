@@ -42,3 +42,9 @@ def conn(tmp_path):
     load_bank(connection, [(1, ROUND_ONE), (2, ROUND_TWO)])
     yield connection
     connection.close()
+
+
+@pytest.fixture(autouse=True)
+def no_real_api_key(monkeypatch):
+    """테스트가 실제 API 를 부르지 않도록 키 환경변수를 지운다(키가 필요한 경우는 가짜 클라이언트를 쓴다)."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)

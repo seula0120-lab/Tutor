@@ -136,6 +136,7 @@ def test_http_server_serves_page_and_api(tmp_path, conn):
                                      headers={"Content-Type": "application/json"})
         data = json.loads(urllib.request.urlopen(req).read())
         assert data["search"]["results"][0]["id"] == "1-1"
+        assert data["ai"]["status"] == "no_key"  # 키가 없으면 검색 결과만 쓴다
         with pytest.raises(urllib.error.HTTPError) as err:
             urllib.request.urlopen(base + "/api/question?round=7&number=7")
         assert err.value.code == 404

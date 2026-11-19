@@ -10,6 +10,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import quiz
+from .ai import explain
 from .analysis import unit_profile
 from .db import connect
 from .glossary import annotate, load_glossary
@@ -57,12 +58,12 @@ def api_glossary(conn, params):
 
 
 def api_ask(conn, body):
-    """질문창: 검색 결과를 돌려준다."""
+    """질문창: 검색 결과와 AI 설명(키가 있을 때)을 돌려준다. AI 가 실패해도 검색 결과는 항상 준다."""
     query = (body.get("q") or "").strip()
     if not query:
         return 400, {"error": "질문을 입력해 주세요."}
     search = search_theory(query, conn, round_limit=parse_scope(body.get("scope")))
-    return 200, {"search": search}
+    return 200, {"search": search, "ai": explain(query, search, conn)}
 
 
 def dispatch(method, path, params, body, conn):

@@ -51,7 +51,7 @@
       <select id="scope"><option value="10">최신 10회분</option><option value="all">전체 회차</option></select>
     </label>
   </div>
-  <div id="aiNotice" class="notice" style="display:none"></div>
+  <div class="small" style="margin-top:6px">AI 설명을 켜면(API 키가 있을 때) 질문과 검색된 기출이 Anthropic API 로 전송되며 사용량에 따라 비용이 듭니다.</div>
   <div id="answer"></div>
 </div>
 
@@ -139,6 +139,8 @@ function renderAnswer(data) {
   if (ai && ai.status === "ok") {
     box.append(el("div", { className: "small", textContent: "AI 설명 (검색된 기출을 근거로, 출처는 회차-문항)" }),
                el("div", { className: "ai", textContent: ai.text }));
+    if (ai.ungrounded.length) box.append(el("div", { className: "notice", textContent: "주의: 검색 근거에 없는 출처가 인용됐습니다: " + ai.ungrounded.join(", ") }));
+    box.append(el("div", { className: "small", textContent: ai.message }));
   } else if (ai && ai.message) {
     box.append(el("div", { className: "notice", textContent: ai.message }));
   }
