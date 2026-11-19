@@ -55,3 +55,11 @@ def test_empty_explanation_shows_notice():
     assert explanation_of({"explanation": ""}) == NO_EXPLANATION == "공식 해설 없음"
     assert explanation_of({"explanation": "  "}) == NO_EXPLANATION
     assert explanation_of({"explanation": "해설"}) == "해설"
+
+
+def test_73_9_choices_repaired_from_pdf():
+    import json as _j
+    row = connect().execute("SELECT choices FROM questions WHERE id='73-9'").fetchone()
+    c = _j.loads(row["choices"])
+    assert c[0].endswith("상대적으로 제조원가의 계산이 부정확함")
+    assert "총생산량으로 나누어 단위당제조원가를 계산" in c[1] and "원가에 의하여 제조원가를 계산" in c[1]
