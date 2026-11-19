@@ -66,7 +66,7 @@ def api_ask(conn, body):
     if not query:
         return 400, {"error": "질문을 입력해 주세요."}
     found = search_theory(query, conn, round_limit=parse_scope(body.get("scope")), limit=SUMMARY_LIMIT)
-    summary = build_summary(conn, found["results"])        # 요약은 더 넓은 후보(상위 SUMMARY_LIMIT)에서 만든다
+    summary = build_summary(conn, found["results"], found["terms"])        # 요약은 더 넓은 후보(상위 SUMMARY_LIMIT)에서 만든다
     shown = {**found, "results": found["results"][:RESULT_LIMIT]}   # 목록은 상위 RESULT_LIMIT 개만 보여 준다
     return 200, {"search": shown, "summary": summary, "ai": explain(query, summary)}
 

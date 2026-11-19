@@ -174,7 +174,7 @@ function sentenceList(items) {
   if (!items.length) return el("div", { className: "small", textContent: "해당 문장이 없습니다." });
   const ul = el("ul");
   for (const it of items) {
-    const li = el("li", {}, it.text + " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""})` }));
+    const li = el("li", {}, it.text + " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""} · 핵심어 ${it.matched.join(", ")})` }));
     if (it.tax_notice) li.append(" ", el("span", { className: "taxflag", textContent: it.tax_notice }));
     ul.append(li);
   }

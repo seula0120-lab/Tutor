@@ -7,7 +7,8 @@ from tutor.bank import load_bank
 from tutor.db import connect
 from tutor.question_type import (CALCULATION, COMBINATION, NEGATIVE, POSITIVE, UNKNOWN, classify)
 from tutor.search import search_theory
-from tutor.summary import build_summary, is_similar, merge_sentences, split_sentences
+from tutor.summary import (SENTENCE_LIMIT, build_summary, is_similar, matched_terms, merge_sentences,
+                           select_sentences, split_sentences)
 
 C4 = ["첫째 문장이다.", "둘째 문장이다.", "셋째 문장이다.", "넷째 문장이다."]   # 기호가 아닌 일반 문장 보기
 
@@ -130,7 +131,7 @@ BANK = [
 def card(tmp_path, query="공손"):
     conn = make_conn(tmp_path, *BANK)
     found = search_theory(query, conn, entries=[], limit=20)
-    return build_summary(conn, found["results"])
+    return build_summary(conn, found["results"], found["terms"])
 
 
 def test_summary_collects_merged_right_and_trap_sentences_with_sources(tmp_path):
@@ -168,7 +169,7 @@ def test_tax_notice_only_when_tax_question_involved(tmp_path):
 
 def test_summary_without_results_is_empty_card(tmp_path):
     conn = make_conn(tmp_path, *BANK)
-    empty = build_summary(conn, [])
+    empty = build_summary(conn, [], [])
     assert empty["right"] == [] and empty["traps"] == [] and empty["coverage"]["questions"] == 0
     assert empty["tax_notice"] is None
 
@@ -176,6 +177,88 @@ def test_summary_without_results_is_empty_card(tmp_path):
 def test_summary_does_not_mutate_database(tmp_path):
     conn = make_conn(tmp_path, *BANK)
     before = json.dumps([tuple(r) for r in conn.execute("SELECT * FROM questions ORDER BY id")], ensure_ascii=False)
-    build_summary(conn, search_theory("공손", conn, entries=[], limit=20)["results"])
+    found = search_theory("공손", conn, entries=[], limit=20)
+    build_summary(conn, found["results"], found["terms"])
     after = json.dumps([tuple(r) for r in conn.execute("SELECT * FROM questions ORDER BY id")], ensure_ascii=False)
     assert before == after
+
+
+# ---- 핵심어 기준 문장 고르기 ----
+def group(text, sources=("1-1",), rounds=(1,)):
+    return {"text": text, "sources": list(sources), "rounds": list(rounds), "count": len(sources), "tax_notice": None}
+
+
+def test_sentences_without_core_term_are_dropped_and_most_matches_first():
+    groups = [group("관계없는 문장이다."), group("정상공손은 원가에 포함한다."),
+              group("비정상공손은 정상공손과 달리 기간비용이다."), group("처리 방법만 말하는 문장이다.")]
+    picked = select_sentences(groups, ["정상공손", "비정상공손", "처리"])
+    assert [g["text"] for g in picked] == ["비정상공손은 정상공손과 달리 기간비용이다.",       # 핵심어 2개(정상공손·비정상공손)
+                                            "정상공손은 원가에 포함한다.", "처리 방법만 말하는 문장이다."]
+    assert picked[0]["matched"] == ["정상공손", "비정상공손"] and "matched" not in groups[0]   # 원본은 그대로
+
+
+def test_ties_break_by_frequency_then_recent_round():
+    groups = [group("공손A 문장이다", ["1-1"], [1]), group("공손B 문장이다", ["9-1"], [9]),
+              group("공손C 문장이다", ["2-1", "3-1"], [2, 3])]
+    assert [g["text"][:3] for g in select_sentences(groups, ["공손"])] == ["공손C", "공손B", "공손A"]
+
+
+def test_limit_is_ten_per_list():
+    groups = [group(f"공손 문장 {i}번이다", [f"{i}-1"], [i]) for i in range(1, 15)]
+    assert SENTENCE_LIMIT == 10 and len(select_sentences(groups, ["공손"])) == 10
+
+
+def test_matching_ignores_spaces_in_source_text():
+    assert matched_terms("제품원 가에 포함", ["제품원가"]) == ["제품원가"]       # 원본 PDF 의 어색한 띄어쓰기
+    assert matched_terms("아무 관계 없음", ["제품원가"]) == []
+
+
+def test_synonym_expanded_term_keeps_official_sentence(tmp_path):
+    from tutor.glossary import load_glossary
+    conn = make_conn(tmp_path, (3, [item(6, "다음 중 공손에 대한 설명으로 옳지 않은 것은?",
+                                         ["불량품은 원가에 넣는다.", "정상공손은 제조원가에 포함한다.", "비정상공손은 기간비용이다.", "공손은 폐기한다."], "1")]))
+    entries = [{"term": "정상공손", "meaning": "x", "synonyms": ["어쩔 수 없이 생기는 불량"]}]
+    found = search_theory("어쩔 수 없이 생기는 불량은 어떻게?", conn, entries=entries, limit=20)
+    assert "정상공손" in found["terms"]                                  # 일상어가 공식 용어로 넓혀짐
+    summary = build_summary(conn, found["results"], found["terms"])
+    assert "정상공손은 제조원가에 포함한다." in [s["text"] for s in summary["right"]]
+
+
+# ---- 실제 기출로 확인: 일반 규칙의 결과일 뿐, 특정 질문용 특수 처리는 없다 ----
+def real_conn(tmp_path):
+    from tutor.bank import BANK_DIR, read_bank_files
+    assert (BANK_DIR / "128.json").is_file(), "data/bank 가 없습니다"
+    conn = connect(tmp_path / "real.db")
+    load_bank(conn, read_bank_files(BANK_DIR))
+    return conn
+
+
+def real_card(conn, query):
+    found = search_theory(query, conn, limit=20)
+    return build_summary(conn, found["results"], found["terms"]), found["terms"]
+
+
+def test_real_normal_abnormal_spoilage_card_has_core_sentences_and_no_noise(tmp_path):
+    conn = real_conn(tmp_path)
+    summary, _ = real_card(conn, "정상공손 비정상공손 처리")
+    right = {s["text"]: s["sources"] for s in summary["right"]}
+    traps = {s["text"]: s["sources"] for s in summary["traps"]}
+    assert any(t.startswith("정상공손은 제조원가") and "117-10" in src for t, src in right.items())
+    assert any("검사시점을 통과" in t and "70-10" in src for t, src in right.items())
+    assert any("품질검사를 통과한" in t and "120-9" in src for t, src in right.items())   # 120-9 의 정답은 3번이라 이 4번 보기는 맞는 문장
+    assert any("영업외비용으로 배부한다" in t and "120-9" in src for t, src in traps.items())   # 정답(틀린 문장) 3번은 함정
+    shown = [s for s in summary["right"] + summary["traps"]]
+    assert not any("평균법" in s["text"] for s in shown)                  # 121-9 의 평균법 문장은 핵심어가 없어 빠진다
+    assert not any(s["sources"] == ["121-9"] for s in shown if "평균법" in s["text"])
+
+
+def test_real_cards_obey_selection_rules_for_several_queries(tmp_path):
+    conn = real_conn(tmp_path)
+    for query in ("정상공손 비정상공손 처리", "자기주식 처리", "영세율 면세 차이", "수정세금계산서 발급"):
+        summary, terms = real_card(conn, query)
+        for key in ("right", "traps"):
+            items = summary[key]
+            assert len(items) <= 10
+            assert all(matched_terms(i["text"], terms) for i in items), (query, key)     # 핵심어 없는 문장 없음
+            counts = [len(i["matched"]) for i in items]
+            assert counts == sorted(counts, reverse=True)                              # 많이 맞힌 순

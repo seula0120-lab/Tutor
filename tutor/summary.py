@@ -1,7 +1,8 @@
 """주제 요약 카드: 검색된 관련 기출에서 '맞는 문장'과 '자주 나온 함정(틀린 문장)'을 모은다. API 를 쓰지 않는다.
 
 흐름(한 방향): 검색 결과 중 관련 기출(related_results) → 유형 판별(question_type) →
-  (부정형·긍정형만) 보기를 맞는/틀린 문장으로 나누기 → 비슷한 문장 합치기 → 출제 현황과 함께 카드로.
+  (부정형·긍정형만) 보기를 맞는/틀린 문장으로 나누기 → 비슷한 문장 합치기 →
+  질문 핵심어가 든 문장만 남겨 핵심어를 많이 맞힌 순으로 → 출제 현황과 함께 카드로.
 조합형·계산형·판별불가 문항은 문장 요약에서 빼고 목록으로만 돌려준다.
 이 파일은 DB 를 읽기만 하고 아무것도 고치지 않는다.
 """
@@ -16,7 +17,7 @@ from .question_type import CALCULATION, COMBINATION, NEGATIVE, POSITIVE, UNKNOWN
 from .quiz import accepted_answers
 
 SIMILAR_RATIO = 0.9       # 이 이상 비슷하면 같은 문장으로 합친다(공백·문장부호 무시)
-SENTENCE_LIMIT = 8        # 카드에 보여 줄 문장 수(맞는 문장·함정 각각)
+SENTENCE_LIMIT = 10       # 카드에 보여 줄 문장 수(맞는 문장·함정 각각)
 EXCLUDED_KIND = {COMBINATION: "조합형", CALCULATION: "계산형", UNKNOWN: "판별불가"}
 
 
@@ -77,6 +78,21 @@ def merge_sentences(entries):
     return groups
 
 
+def matched_terms(text, terms):
+    """문장에 들어 있는 질문 핵심어 목록(공백은 무시하고 비교). 핵심어는 질문에서 뽑은 낱말과 동의어로 넓힌 공식 용어다."""
+    compact = normalize(text)
+    return [t for t in terms if normalize(t) and normalize(t) in compact]
+
+
+def select_sentences(groups, terms):
+    """핵심어가 하나도 없는 문장은 빼고, 핵심어를 많이 맞힌 순 → 출제 횟수 → 최근 회차 순으로 SENTENCE_LIMIT 개만 돌려준다.
+    원본 groups 는 고치지 않고 복사해서 matched(맞힌 핵심어)를 붙인다."""
+    scored = [{**g, "matched": matched_terms(g["text"], terms)} for g in groups]
+    kept = [g for g in scored if g["matched"]]
+    kept.sort(key=lambda g: (-len(g["matched"]), -g["count"], -max(g["rounds"])))
+    return kept[:SENTENCE_LIMIT]
+
+
 def coverage(rows):
     """출제 현황: 관련 문항 수, 나온 회차 목록(최근 순), 가장 최근 회차, 단원별 문항 수."""
     rounds = sorted({r["round"] for r in rows}, reverse=True)
@@ -85,8 +101,8 @@ def coverage(rows):
             "latest_round": rounds[0] if rounds else None, "units": units.most_common(3)}
 
 
-def build_summary(conn, results):
-    """검색 결과(점수 포함) → 요약 카드 dict.
+def build_summary(conn, results, terms):
+    """검색 결과(점수 포함)와 질문 핵심어(terms, 동의어 확장 포함) → 요약 카드 dict.
 
     {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·판별불가 목록), "tax_notice"(카드 전체 안내 또는 None)}
     """
@@ -105,8 +121,8 @@ def build_summary(conn, results):
     latest_tax = max((r["round"] for r in rows if r["subject"] == TAX_SUBJECT), default=None)
     return {
         "coverage": coverage(rows),
-        "right": merge_sentences(right)[:SENTENCE_LIMIT],
-        "traps": merge_sentences(traps)[:SENTENCE_LIMIT],
+        "right": select_sentences(merge_sentences(right), terms),
+        "traps": select_sentences(merge_sentences(traps), terms),
         "excluded": excluded,
         "tax_notice": tax_notice(TAX_SUBJECT, latest_tax) if has_tax else None,
     }
