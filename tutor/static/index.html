@@ -37,6 +37,7 @@
   .meaning { background: #fff6d6; border-radius: 6px; padding: 8px 10px; margin-top: 8px; display: none; }
   .ai { background: #f6f1ff; border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; margin-top: 8px; }
   .small { font-size: 12px; color: #5b6577; }
+  .taxflag { display: inline-block; font-size: 12px; color: #8a4b00; background: #ffe9cc; border-radius: 4px; padding: 1px 6px; margin: 2px 0; }
 </style>
 </head>
 <body>
@@ -48,7 +49,7 @@
   <div class="row">
     <button id="ask">질문하기</button>
     <label class="small">검색 범위
-      <select id="scope"><option value="10">최신 10회분</option><option value="all">전체 회차</option></select>
+      <select id="scope"><option value="all">전체 회차</option><option value="10">최신 10회분</option></select>
     </label>
   </div>
   <div class="small" style="margin-top:6px">AI 설명을 켜면(API 키가 있을 때) 질문과 검색된 기출이 Anthropic API 로 전송되며 사용량에 따라 비용이 듭니다.</div>
@@ -151,6 +152,7 @@ function renderAnswer(data) {
   for (const r of s.results) {
     const row = el("div", { className: "hit" });
     row.append(el("div", { className: "meta", textContent: `출처 ${r.id} (${r.round}회 ${r.number}번) · ${[r.subject, r.tax, r.unit].filter(Boolean).join(" › ")}` }),
+               ...(r.tax_notice ? [el("span", { className: "taxflag", textContent: r.tax_notice })] : []),
                el("div", { textContent: r.question }));
     const open = el("button", { className: "ghost", textContent: "문제·해설 열기" });
     open.style.marginTop = "4px";
@@ -184,6 +186,7 @@ function renderCard(q) {
   card.replaceChildren();
   card.append(el("div", { className: "meta", textContent: `${q.id} (${q.round}회 ${q.number}번) · ${[q.subject, q.tax, q.unit].filter(Boolean).join(" › ")} · ${q.points}점` }),
               el("div", { style: "margin:6px 0;font-weight:600", textContent: q.question }));
+  if (q.tax_notice) card.append(el("span", { className: "taxflag", textContent: q.tax_notice }));
   if (q.multi) card.append(el("div", { className: "notice", textContent: "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다." }));
   const result = el("div");
   const buttons = q.choices.map((text, i) => {

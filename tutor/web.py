@@ -14,17 +14,17 @@ from .ai import explain
 from .analysis import unit_profile
 from .db import connect
 from .glossary import annotate, load_glossary
-from .search import DEFAULT_ROUNDS, search_theory
+from .search import DEFAULT_ROUNDS, LATEST_ROUNDS, search_theory
 from .sync import format_report, sync_raw
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
 
 
-def parse_scope(value):
-    """'all' 이면 전체 회차(None), 숫자면 최신 그 회차 수, 비어 있으면 기본 10회분."""
+def parse_scope(value, default=DEFAULT_ROUNDS):
+    """'all' 이면 전체 회차(None), 숫자면 최신 그 회차 수, 비어 있으면 default(검색은 전체 회차)."""
     if value in (None, ""):
-        return DEFAULT_ROUNDS
+        return default
     if value == "all":
         return None
     number = int(value)
@@ -72,7 +72,7 @@ def dispatch(method, path, params, body, conn):
     try:
         if method == "GET":
             if path == "/api/analysis":
-                return 200, unit_profile(conn, parse_scope(params.get("scope")))
+                return 200, unit_profile(conn, parse_scope(params.get("scope"), LATEST_ROUNDS))
             if path == "/api/units":
                 return 200, {"units": quiz.list_units(conn)}
             if path == "/api/question":

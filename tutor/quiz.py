@@ -7,6 +7,8 @@
 import json
 import random
 
+from .notice import tax_notice
+
 
 def accepted_answers(answer):
     """'3' 또는 복수정답 '1,3' 을 {'1', '3'} 집합으로 바꾼다."""
@@ -19,6 +21,7 @@ def public_question(row):
         "id": row["id"], "round": row["round"], "number": row["number"], "subject": row["subject"],
         "tax": row["tax"], "unit": row["unit"], "points": row["points"], "question": row["question"],
         "choices": json.loads(row["choices"]), "multi": len(accepted_answers(row["answer"])) > 1,
+        "tax_notice": tax_notice(row["subject"], row["round"]),
     }
 
 

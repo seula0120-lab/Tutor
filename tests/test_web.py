@@ -110,7 +110,8 @@ def test_glossary_endpoint_filters(conn):
 
 
 def test_parse_scope():
-    assert parse_scope(None) == 10 and parse_scope("all") is None and parse_scope("3") == 3
+    assert parse_scope(None) is None and parse_scope("") is None      # 검색 기본은 전체 회차
+    assert parse_scope(None, 10) == 10 and parse_scope("all", 10) is None and parse_scope("3") == 3
     with pytest.raises(ValueError):
         parse_scope("0")
 
@@ -143,3 +144,8 @@ def test_http_server_serves_page_and_api(tmp_path, conn):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_quiz_card_has_tax_notice_only_for_tax_questions(conn):
+    assert quiz.find_question(conn, 1, 11)["tax_notice"] == "1회 · 세법 개정 확인 필요"
+    assert quiz.find_question(conn, 1, 1)["tax_notice"] is None

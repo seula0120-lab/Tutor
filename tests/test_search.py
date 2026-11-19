@@ -71,3 +71,27 @@ def test_real_glossary_file_loads_with_synonyms():
     entries = load_glossary()
     assert len(entries) >= 100 and all(e["meaning"] for e in entries)
     assert any(e["synonyms"] for e in entries)
+
+
+def test_default_scope_is_all_rounds(conn):
+    # 기본값(전체 회차): 옛 회차(1회)에만 있는 문항도 찾고, 범위 설명이 '전체 회차'다.
+    result = search_theory("영세율", conn, entries=[])
+    assert result["scope"] == "전체 회차" and ids(result) == ["1-11"]
+    assert search_theory("영세율", conn, round_limit=1, entries=[])["results"] == []   # 최신 1회분만 고르면 없음
+
+
+def test_tax_notice_only_on_tax_subject_with_round(conn):
+    vat = search_theory("영세율", conn, entries=[])["results"][0]
+    assert vat["tax_notice"] == "1회 · 세법 개정 확인 필요"
+    for text in ("저가법", "자기주식", "보조부문"):                       # 재무·원가: 표시 없음
+        assert search_theory(text, conn, entries=[])["results"][0]["tax_notice"] is None
+
+
+def test_same_score_puts_recent_round_first(tmp_path):
+    from conftest import item
+    from tutor.bank import load_bank
+    from tutor.db import connect
+    same = dict(question="다음 중 저가법에 대한 설명으로 옳은 것은?", choices=["가", "나", "다", "라"], answer="1")
+    c = connect(tmp_path / "tie.db")
+    load_bank(c, [(5, [item(1, **same)]), (9, [item(1, **same)]), (7, [item(1, **same)])])
+    assert ids(search_theory("저가법", c, entries=[])) == ["9-1", "7-1", "5-1"]

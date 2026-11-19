@@ -1,4 +1,4 @@
-"""이론 기출 검색: 질문 → 검색어 → (일상어 동의어 확장) → FTS5/LIKE 후보 → 점수 순 정렬.
+"""이론 기출 검색(기본 범위는 전체 회차): 질문 → 검색어 → (일상어 동의어 확장) → FTS5/LIKE 후보 → 점수 순 정렬.
 
 흐름(한 방향): 질문 글 → extract_terms → 확장 낱말 추가 → 후보 찾기 → 점수 매기기 → 결과 목록.
 3글자 이상 낱말은 FTS5 trigram, 1~2글자(손금·유보 등)는 LIKE 로 찾는다.
@@ -9,8 +9,10 @@ import math
 import re
 
 from .glossary import expand_everyday_words, load_glossary
+from .notice import tax_notice
 
-DEFAULT_ROUNDS = 10      # 기본 범위: 최신 10회분
+LATEST_ROUNDS = 10       # 선택 범위 "최신 10회분"의 회차 수
+DEFAULT_ROUNDS = None    # 기본 검색 범위: 전체 회차(None). 숫자를 주면 최신 N회분
 RESULT_LIMIT = 5
 EXPANDED_WEIGHT = 1.5    # 사전에서 넓혀 온 공식 용어는 질문에 직접 쓴 낱말보다 믿을 만하다
 STEM_BONUS = 2           # 질문 문장에 낱말이 나오면 점수 2배
@@ -101,7 +103,8 @@ def search_theory(query, conn, round_limit=DEFAULT_ROUNDS, entries=None, limit=R
     """질문과 관련된 이론 기출을 점수 순으로 찾는다.
 
     돌려주는 값: {"results": [...], "terms": 쓴 낱말, "expanded": 일상어에서 넓힌 공식 용어, "scope": 범위 설명, "note": 안내}
-    각 결과: id, round, number, subject, tax, unit, question, matched(맞은 낱말), score.
+    각 결과: id, round, number, subject, tax, unit, question, matched(맞은 낱말), score, tax_notice(세무회계만).
+    점수가 같으면 최근 회차가 위에 온다(정렬은 _score_rows).
     """
     entries = load_glossary() if entries is None else entries
     weights = build_weighted_terms(query, entries)
@@ -117,7 +120,8 @@ def search_theory(query, conn, round_limit=DEFAULT_ROUNDS, entries=None, limit=R
         out["results"].append({
             "id": row["id"], "round": row["round"], "number": row["number"], "subject": row["subject"],
             "tax": row["tax"], "unit": row["unit"], "question": row["question"],
-            "matched": matched, "score": round(score, 2)})
+            "matched": matched, "score": round(score, 2),
+            "tax_notice": tax_notice(row["subject"], row["round"])})
     if not out["results"]:
         out["note"] = f"{scope}에서 관련 이론 기출을 찾지 못했습니다."
     return out
