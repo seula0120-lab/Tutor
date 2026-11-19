@@ -211,6 +211,10 @@ function renderSummary(sm) {
     for (const e of sm.excluded) ul.append(el("li", {}, `${e.id} [${e.kind}] ${e.question.slice(0, 60)}${e.question.length > 60 ? "…" : ""}`));
     card.append(el("h3", { textContent: "계산·조합형 문항 (문장 요약에서 제외)" }), ul);
   }
+  const run = el("div", { id: "topicRun", style: "margin-top:8px" });
+  const go = el("button", { id: "topicGo", textContent: `이 주제 기출 풀기 (${sm.related_ids.length}문제)` });
+  go.addEventListener("click", () => runSession(sm.related_ids, run, "이 주제 기출"));
+  card.append(el("div", { className: "row" }, go), run);
   card.append(el("div", { className: "small", textContent: "문항 유형(옳은/옳지 않은 것)은 문제 글의 낱말로 자동 판별하므로 틀릴 수 있습니다. 시험 판단은 공식 해설을 따르세요." }));
   return card;
 }

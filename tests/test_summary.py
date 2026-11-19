@@ -317,3 +317,20 @@ def test_stopword_filter_is_not_applied_to_direct_hit_notice(tmp_path):
     from tutor.summary import covers_core_terms
     conn = make_conn(tmp_path, (3, [item(1, "다음 중 처리 방법으로 옳은 것은?", C4, "1")]))
     assert covers_core_terms(conn, [{"id": "3-1"}], ["처리"]) is True            # 안내 기준은 그대로
+
+
+# ---- 이 주제 기출 풀기 ----
+def test_related_ids_include_calculation_and_combination_questions(tmp_path):
+    summary = card(tmp_path)
+    assert {"3-6", "3-7", "3-8"} <= set(summary["related_ids"])           # 부정형 + 조합형 + 계산형
+    assert len(summary["related_ids"]) == len(set(summary["related_ids"]))
+    assert {e["id"] for e in summary["excluded"]} <= set(summary["related_ids"])
+
+
+def test_topic_run_reuses_shared_session_runner():
+    from pathlib import Path
+    static = Path(__file__).resolve().parent.parent / "tutor" / "static"
+    page = (static / "index.html").read_text(encoding="utf-8")
+    shared = (static / "quizcard.js").read_text(encoding="utf-8")
+    assert "runSession(sm.related_ids" in page and "async function runSession" in shared
+    assert "function renderCard" not in page and "function runSession" not in page        # 복사본 없음

@@ -128,7 +128,7 @@ def coverage(rows):
 def build_summary(conn, results, terms):
     """검색 결과(점수 포함)와 질문 핵심어(terms, 동의어 확장 포함) → 요약 카드 dict.
 
-    {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·판별불가 목록), "tax_notice"(카드 전체 안내 또는 None)}
+    {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·판별불가 목록), "related_ids"(관련 기출 전부), "tax_notice"(카드 전체 안내 또는 None)}
     """
     rows = [conn.execute("SELECT * FROM questions WHERE id = ?", (i,)).fetchone() for i in (r["id"] for r in related_results(results))]
     right, traps, excluded = [], [], []
@@ -148,5 +148,6 @@ def build_summary(conn, results, terms):
         "right": select_sentences(merge_sentences(right), terms),
         "traps": select_sentences(merge_sentences(traps), terms),
         "excluded": excluded,
+        "related_ids": [r["id"] for r in rows],        # '이 주제 기출 풀기' 대상: 계산·조합형 포함, 검색 점수 순
         "tax_notice": tax_notice(TAX_SUBJECT, latest_tax) if has_tax else None,
     }
