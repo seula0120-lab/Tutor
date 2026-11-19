@@ -35,6 +35,10 @@ NUMERIC_CHOICE = re.compile(r"^[\s\d,.\-+%원주개월일년시간배()]+$")
 SYMBOL_CHOICE = re.compile(r"^(?:[가나다라마바사]|[㉠-㉧]|[ㄱ-ㅎ])(?:\s*[,·ㆍ와과및]\s*(?:[가나다라마바사]|[㉠-㉧]|[ㄱ-ㅎ]))*\s*$")
 STEM_END = re.compile(r"[?？]|고르시오|구하시오|구하여라|계산하시오|하시오")
 SENTENCE_END = re.compile(r"(다|요|음|함|임|됨)\s*\.?$|\.$")
+# 판별불가가 될 뻔한 물음 중, 참·거짓 문장이 아니라 '항목 하나를 고르는' 물음이라고 안전하게 말할 수 있는 표현.
+SELECT_STEM = re.compile(r"어느\s*(것|방법|쪽|경우)|어떻게|무엇인가|누구인가|나머지(와|보다)?\s*다른|다른\s*(것|항목|경우)|"
+                         r"(경우|사람|사례|거래|항목|것)(은|는)\s*[?？]")
+TABLE_TAIL_MAX = 60        # 물음 뒤에 붙은 표 머리글(열 이름, 숫자 없음)의 최대 글자 수
 NOUN_PHRASE_MAX = 30       # 이 글자 수 이하이고 문장 끝맺음이 없으면 명사구
 
 
@@ -79,4 +83,18 @@ def classify(question, choices):
         return strong                      # 옳은/옳지 않은 것을 고르라는 분명한 물음이면 보기가 짧아도 문장 요약 대상이다
     if is_noun_phrase_choices(choices):
         return IDENTIFY                    # '무엇인가/어느 것인가' 처럼 항목 하나를 고르는 물음
-    return stem_polarity(question) or UNKNOWN
+    return stem_polarity(question) or _select_one(question, choices) or UNKNOWN
+
+
+def _select_one(question, choices):
+    """다른 표지가 없을 때만: 항목 하나를 고르는 물음이면 IDENTIFY, 아니면 None.
+
+    ① '어느 것/어떻게/누구인가/나머지와 다른 것' 같은 물음, ② 물음 뒤에 표 머리글(열 이름)만 붙고 보기가 짧은 값인 표 형식 문항.
+    자료를 주고 금액·세무조정을 고르게 하는 문항처럼 이 둘에 안 맞는 것은 그대로 판별불가로 둔다."""
+    stem = stem_of(question)
+    if SELECT_STEM.search(stem):
+        return IDENTIFY
+    tail = question[len(stem):].strip()
+    if tail and len(tail) <= TABLE_TAIL_MAX and not re.search(r"\d", tail) and not SENTENCE_END.search(tail) and all(len(c.strip()) <= NOUN_PHRASE_MAX for c in choices):
+        return IDENTIFY
+    return None

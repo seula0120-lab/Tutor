@@ -87,3 +87,21 @@ def test_real_bank_examples_and_distribution(tmp_path):
     assert kind["66-15"] == IDENTIFY and kind["68-9"] == IDENTIFY
     assert sum(1 for v in kind.values() if v == UNKNOWN) <= 10
     assert len(kind) == 540
+
+
+def test_previously_unknown_select_one_questions_are_identify():
+    from tutor.bank import BANK_DIR, read_bank_files
+    rows = {f"{r}-{i['number']}": i for r, items in read_bank_files(BANK_DIR) for i in items}
+    for qid in ("66-3", "67-10", "69-8", "73-14", "76-7", "116-1", "121-14", "123-14"):
+        assert classify(rows[qid]["question"], rows[qid]["choices"]) == IDENTIFY, qid
+
+
+def test_data_given_adjustment_question_stays_unknown():
+    from tutor.bank import BANK_DIR, read_bank_files
+    rows = {f"{r}-{i['number']}": i for r, items in read_bank_files(BANK_DIR) for i in items}
+    assert classify(rows["78-11"]["question"], rows["78-11"]["choices"]) == UNKNOWN
+
+
+def test_select_one_rule_does_not_touch_questions_with_polarity():
+    # '다른 것' 이 들어 있어도 옳지 않은 것을 고르라는 물음이면 그대로 부정형이다
+    assert classify("다음 중 설명으로 옳지 않은 것은? 다른 것과 비교한 설명", ["가나다 문장이다.", "나다라 문장이다.", "다라마 문장이다.", "라마바 문장이다."]) == NEGATIVE
