@@ -16,3 +16,10 @@
 - 단원 태그는 낱말 규칙이라 틀릴 수 있다(예: 127-5 이익잉여금 문항이 '유가증권·금융자산'으로 들어감). 규칙은 `tutor/tagging.py` 한 곳에서 고친다. 사람 검토 필요.
 - 웹 화면은 브라우저 스크린샷으로 확인하지 못했다(브라우저 도구 시작 실패). HTTP API 호출·JS 문법 검사·테스트로만 확인했다.
 - 실행 방법: `.venv/bin/python scripts/load_db.py` → `.venv/bin/python -m tutor.web` → http://127.0.0.1:8000/
+
+## 새 회차 자동 반영 (2026-11-19)
+- `data/raw/<회차>/answer.(pdf|hwp)` → `data/bank/<회차>.json` → DB. 변환기는 `tutor/answer_lines.py`(PDF·HWP 읽기)·`tutor/answer_parser.py`(해석·검사), 동기화는 `tutor/sync.py`·`scripts/sync_raw.py`. 서버 시작 때도 한 번 돈다. 회차 번호는 폴더 이름에서만 읽는다.
+- 검사: 이론 15문항 · 보기 4개 · 첫 장 정답표(A형)와 [답] 일치. 하나라도 틀리면 그 회차 JSON 을 쓰지 않고 이유를 출력한다(이전에 만든 JSON 이 있으면 그대로 남는다).
+- 이전 프로젝트 원본 36회차(PDF 18·HWP 18)를 읽기 전용으로 변환해 이전 프로젝트 bank 와 문제·보기·정답·해설을 비교: 36/36 같음. HWP 변환은 이 비교로만 확인했다(테스트는 합성 PDF 와 HTML 조각으로 한다).
+- bank JSON 의 `practice` 는 빈 목록이다(실무는 MVP 범위 밖). 과목·세목·단원은 이 프로젝트의 `tutor/tagging.py` 로 붙인다.
+- `data/raw/` 는 기출 원본이라 Git 에서 제외한다. 128회 원본은 이전 프로젝트에서 복사해 두었다.

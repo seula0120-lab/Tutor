@@ -70,3 +70,9 @@ def test_load_does_not_modify_source_items():
     from tutor.bank import question_row
     question_row(1, ROUND_ONE[0])
     assert json.dumps(ROUND_ONE, ensure_ascii=False) == before
+
+
+def test_loading_nothing_empties_db_without_error(conn):
+    assert load_bank(conn, []) == 0
+    assert conn.execute("SELECT COUNT(*) FROM questions").fetchone()[0] == 0
+    assert conn.execute("SELECT COUNT(*) FROM theory_fts").fetchone()[0] == 0

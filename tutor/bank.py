@@ -43,10 +43,12 @@ def search_content(row):
 def load_bank(conn, rounds):
     """rounds 로 DB 를 통째로 다시 채우고 적재한 문항 수를 돌려준다."""
     rows = [question_row(round_no, item) for round_no, items in rounds for item in items]
-    columns = list(rows[0]) if rows else []
     with conn:  # 하나의 트랜잭션
         conn.execute("DELETE FROM theory_fts")
         conn.execute("DELETE FROM questions")
+        if not rows:  # 적재할 문항이 없으면 비운 채로 끝낸다
+            return 0
+        columns = list(rows[0])
         marks = ",".join("?" for _ in columns)
         conn.executemany(f"INSERT INTO questions({','.join(columns)}) VALUES ({marks})",
                          [[r[c] for c in columns] for r in rows])

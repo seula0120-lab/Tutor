@@ -9,3 +9,4 @@ data/tutor.db
 # 사용자가 만든 실행 파일(건드리지 않음)
 전산세무튜터.app/
 전산세무튜터.command
+data/raw/
