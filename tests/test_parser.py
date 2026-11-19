@@ -80,3 +80,11 @@ def test_find_answer_file_prefers_pdf_then_hwp(tmp_path):
     assert find_answer_file(tmp_path).name == "answer.hwp"
     (tmp_path / "answer.pdf").write_bytes(b"x")
     assert find_answer_file(tmp_path).name == "answer.pdf"
+
+
+def test_individual_costing_with_work_in_process_words_gets_individual_unit():
+    from tutor.tagging import tag_question
+    stem = "㈜우리상사는 정상개별원가 계산방법을 채택하고 있다. 배부차이를 조정하면 기말재공품의 가액은 얼마인가?"
+    assert tag_question(8, stem, ["1", "2", "3", "4"], "")[2] == "개별원가계산"
+    process = "다음 중 종합원가계산에서 기말재공품 평가에 대한 설명으로 옳은 것은?"
+    assert tag_question(8, process, ["가", "나", "다", "라"], "")[2] == "종합원가계산"   # 종합원가 문항은 그대로
