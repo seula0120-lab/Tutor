@@ -20,6 +20,13 @@ SIMILAR_RATIO = 0.9       # 이 이상 비슷하면 같은 문장으로 합친�
 SENTENCE_LIMIT = 10       # 카드에 보여 줄 문장 수(맞는 문장·함정 각각)
 # 어느 문제에나 나오는 흔한 낱말: 문장 순위(핵심어 세기)에서는 핵심어로 치지 않는다.
 # 직접 다룬 기출이 있는지 보는 안내(covers_core_terms)에는 적용하지 않는다.
+# 뜻이 반대인 낱말 쌍(정규식). 한쪽 문장에만 앞 낱말이, 다른 쪽에만 뒤 낱말이 더 많이 나오면 비슷해도 합치지 않는다.
+ANTONYM_PAIRS = [
+    ("있", "없"), ("증가", "감소"), ("포함", "제외"), ("이상", "이하"), ("초과", "미달"), ("초과", "미만"),
+    ("과대", "과소"), ("유리", "불리"), ("가산", "차감"), ("할증", "할인"), ("선입", "후입"), ("상승", "하락"),
+    ("(?<!불)공제", "불공제"), ("(?<!불)산입", "불산입"), ("(?<!불)인정", "불인정"), ("(?<!불)가능", "불가능"),
+    ("(?<!불)완전", "불완전"),
+]
 STOPWORDS = frozenset({"처리", "설명", "방법", "경우", "내용", "관련", "대한", "다음", "해당", "사항"})
 EXCLUDED_KIND = {COMBINATION: "조합형", CALCULATION: "계산형", IDENTIFY: "식별형", UNKNOWN: "판별불가"}
 ALL_CORRECT_KIND = "전항 정답 처리 문항"     # 정답이 모든 보기인 문항: 맞는/틀린 문장을 가를 수 없다
@@ -39,12 +46,31 @@ def normalize(sentence):
     return re.sub(r"[\s.,·ㆍ()\[\]「」'\"“”‘’]", "", sentence)
 
 
+def _numbers(text):
+    return sorted(re.findall(r"\d[\d,.]*", text))
+
+
+def has_opposite_words(na, nb):
+    """두 글에서 뜻이 반대인 낱말(ANTONYM_PAIRS)이 서로 엇갈려 나오는가."""
+    for x, y in ANTONYM_PAIRS:
+        xa, xb = len(re.findall(x, na)), len(re.findall(x, nb))
+        ya, yb = len(re.findall(y, na)), len(re.findall(y, nb))
+        if (xa > xb and yb > ya) or (xb > xa and ya > yb):
+            return True
+    return False
+
+
 def is_similar(a, b):
-    """두 문장이 같은 문장으로 볼 만큼 비슷한가. 부정('않')이 한쪽에만 있으면 뜻이 반대일 수 있어 합치지 않는다."""
+    """두 문장이 같은 문장으로 볼 만큼 비슷한가.
+
+    합치지 않는 경우: 부정('않/아니')이 한쪽에만 있음, 숫자가 다름, 뜻이 반대인 낱말이 엇갈림(증가/감소 등).
+    한 문항의 서로 다른 보기끼리 합치지 않는 것은 merge_sentences 가 막는다."""
     na, nb = normalize(a), normalize(b)
     if na == nb:
         return True
     if ("않" in na) != ("않" in nb) or ("아니" in na) != ("아니" in nb):
+        return False
+    if _numbers(na) != _numbers(nb) or has_opposite_words(na, nb):
         return False
     matcher = SequenceMatcher(None, na, nb)
     return matcher.quick_ratio() >= SIMILAR_RATIO and matcher.ratio() >= SIMILAR_RATIO
@@ -66,7 +92,8 @@ def merge_sentences(entries):
     """
     groups = []
     for text, source, round_no, is_tax in sorted(entries, key=lambda e: -e[2]):  # 최근 회차부터 넣어 대표를 최신으로
-        group = next((g for g in groups if is_similar(g["text"], text)), None)
+        # 같은 문항의 다른 보기는 서로 다른 문장이므로 합치지 않는다
+        group = next((g for g in groups if source not in g["sources"] and is_similar(g["text"], text)), None)
         if group is None:
             group = {"text": text, "sources": [], "rounds": [], "tax": False}
             groups.append(group)
