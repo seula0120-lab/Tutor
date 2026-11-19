@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 from . import mock, quiz, records
 from .ai import explain
-from .analysis import unit_profile
+from .analysis import study_order, unit_profile
 from .db import connect
 from .glossary import annotate, load_glossary
 from .search import DEFAULT_ROUNDS, LATEST_ROUNDS, RESULT_LIMIT, search_theory
@@ -80,6 +80,12 @@ def dispatch(method, path, params, body, conn):
         if method == "GET":
             if path == "/api/analysis":
                 return 200, unit_profile(conn, parse_scope(params.get("scope"), LATEST_ROUNDS))
+            if path == "/api/study_order":
+                return 200, study_order(conn, parse_scope(params.get("scope"), LATEST_ROUNDS))
+            if path == "/api/quiz_set":
+                ids = quiz.pick_set(conn, params.get("subject"), params.get("tax"), params.get("unit"),
+                                    int(params.get("count") or 5))
+                return (200, {"ids": ids}) if ids else (404, {"error": "조건에 맞는 문항이 없습니다."})
             if path == "/api/units":
                 return 200, {"units": quiz.list_units(conn)}
             if path == "/api/question":

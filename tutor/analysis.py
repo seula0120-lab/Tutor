@@ -27,3 +27,30 @@ def unit_profile(conn, round_limit=None):
     } for r in data]
     rows.sort(key=lambda r: (-r["points_per_round"], r["label"]))
     return {"rounds": len(rounds), "total_questions": total, "rows": rows}
+
+
+MIN_SOLVED = 5   # 단원에서 서로 다른 문항을 이만큼 풀어야 정답률을 믿는다
+
+
+def study_order(conn, round_limit=None):
+    """공부 순서: 단원별 회당 예상 손실 점수 = 회당 배점 × (1 − 내 정답률), 큰 순.
+
+    정답률 = 정답 기록 수 ÷ 풀이 기록 수(확인만 한 기록은 제외). 푼 문항(서로 다른 문항)이 MIN_SOLVED 개 미만이면
+    정답률을 지어내지 않고 '기록 부족'으로 두며, 그런 단원은 표의 맨 아래에 회당 배점 순으로 둔다.
+    """
+    from .records import unit_stats
+    stats = unit_stats(conn)
+    rows = []
+    for unit in unit_profile(conn, round_limit)["rows"]:
+        stat = stats.get((unit["subject"], unit["tax"], unit["unit"]))
+        solved = stat["questions"] if stat else 0
+        enough = solved >= MIN_SOLVED
+        accuracy = stat["correct"] / stat["attempts"] if enough else None
+        rows.append({"label": unit["label"], "subject": unit["subject"], "tax": unit["tax"], "unit": unit["unit"],
+                     "points_per_round": unit["points_per_round"], "solved_questions": solved,
+                     "accuracy": None if accuracy is None else round(accuracy, 3),
+                     "expected_loss": None if accuracy is None else round(unit["points_per_round"] * (1 - accuracy), 2),
+                     "status": "ok" if enough else "기록 부족"})
+    rows.sort(key=lambda r: (r["expected_loss"] is None,
+                             -(r["expected_loss"] if r["expected_loss"] is not None else 0), -r["points_per_round"], r["label"]))
+    return {"min_solved": MIN_SOLVED, "rows": rows}

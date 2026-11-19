@@ -74,3 +74,19 @@ def reveal(conn, question_id):
     if row is None:
         return {"error": f"문항 {question_id} 없음"}
     return {"id": question_id, "answer": row["answer"], "explanation": row["explanation"]}
+
+
+def pick_set(conn, subject=None, tax=None, unit=None, count=5, rng=random):
+    """한 단원에서 count 문항을 무작위로 골라 id 목록으로 돌려준다. 아직 못 맞힌 문항을 먼저, 모자라면 맞힌 문항으로 채운다."""
+    from .records import correct_ids
+    solved = correct_ids(conn)
+    where, args = [], []
+    for column, value in (("subject", subject), ("tax", tax), ("unit", unit)):
+        if value:
+            where.append(f"{column} = ?")
+            args.append(value)
+    rows = conn.execute("SELECT id FROM questions" + (" WHERE " + " AND ".join(where) if where else ""), args).fetchall()
+    ids = [r["id"] for r in rows]
+    rng.shuffle(ids)
+    ids.sort(key=lambda i: i in solved)
+    return ids[:count]

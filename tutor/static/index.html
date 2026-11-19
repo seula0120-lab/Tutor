@@ -78,6 +78,9 @@
     <span id="anInfo" class="small"></span>
   </div>
   <div style="margin-top:8px"><table id="anTable"></table></div>
+  <h3 style="font-size:14px;margin-top:18px">공부 순서 <span class="small">회당 예상 손실 = 회당 배점 × (1 − 내 정답률). 푼 문항이 5개 미만인 단원은 정답률을 계산하지 않습니다.</span></h3>
+  <table id="soTable"></table>
+  <div id="studyRun" style="margin-top:12px"></div>
 </div>
 
 <div id="answers" class="panel">
@@ -227,7 +230,25 @@ async function loadAnalysis() {
       el("td", { className: "num", textContent: r.points_per_round })));
   }
 }
-$("anScope").addEventListener("change", loadAnalysis);
+$("anScope").addEventListener("change", () => { loadAnalysis(); loadStudyOrder(); });
+
+async function loadStudyOrder() {
+  const { data } = await api("/api/study_order?" + query({ scope: $("anScope").value }));
+  const table = $("soTable");
+  table.replaceChildren(el("tr", {}, ...["순서", "단원", "회당 배점", "푼 문항", "내 정답률", "회당 예상 손실", ""].map((h) => el("th", { textContent: h }))));
+  data.rows.forEach((r, n) => {
+    const go = el("button", { className: "ghost", textContent: "이 단원 5문제 풀기" });
+    go.addEventListener("click", async () => {
+      const res = await api("/api/quiz_set?" + query({ subject: r.subject, tax: r.tax, unit: r.unit, count: 5 }));
+      if (res.ok) runSession(res.data.ids, $("studyRun"), `${r.label} 5문제`);
+    });
+    const lack = r.status !== "ok";
+    table.append(el("tr", {}, el("td", { className: "num", textContent: lack ? "-" : n + 1 }), el("td", { textContent: r.label }),
+      el("td", { className: "num", textContent: r.points_per_round }), el("td", { className: "num", textContent: r.solved_questions }),
+      el("td", { className: "num", textContent: lack ? "기록 부족" : Math.round(r.accuracy * 100) + "%" }),
+      el("td", { className: "num", textContent: lack ? "기록 부족" : r.expected_loss }), el("td", {}, go)));
+  });
+}
 
 // ---- 기출 답안 탭 ----
 let solved = [];
@@ -335,6 +356,7 @@ $("mockStart").addEventListener("click", async () => {
     submit.disabled = true;
     const res = await api("/api/mock/submit", { ids, answers: mockAnswers });
     renderMockResult(res.data);
+    loadStudyOrder();
     loadMockHistory(res.data.history);
   });
   box.append(el("div", { className: "row" }, submit));
@@ -365,7 +387,7 @@ async function loadMockHistory(known) {
 }
 document.querySelector('.tab[data-tab="mock"]').addEventListener("click", () => loadMockHistory());
 
-loadAnalysis(); loadUnits(); loadGlossary();
+loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary();
 </script>
 </body>
 </html>
