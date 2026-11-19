@@ -174,6 +174,25 @@ async function main() {
     await page.screenshot("toc");
   });
 
+  await scenario("오프라인 파일(file://): 오답 잠금·해설 없음, 정답 해설", async () => {
+    const out = spawn(PYTHON, [join(ROOT, "scripts", "export_offline.py")], { cwd: ROOT });
+    await new Promise((ok) => out.on("exit", ok));
+    await page.goto("file://" + join(ROOT, "data", "export", "회계튜터_목차.html"));
+    await page.evaluate(`document.querySelector('details.subject').open = true; document.querySelector('details.subject details').open = true; true`);
+    const info = await page.evaluate(`(() => { const q = JSON.parse(document.getElementById('data').textContent)[0].units[0].questions[0];
+      return { answer: q.answer, count: q.choices.length }; })()`);
+    const right = info.answer.split(",").map(Number);
+    const wrong = [...Array(info.count).keys()].map((i) => i + 1).find((n) => !right.includes(n));
+    await page.evaluate(`document.querySelector('details.subject details .qrow').click(); document.querySelectorAll('details.subject details .slot .choice')[${wrong - 1}].click(); true`);
+    assert(await page.evaluate(`document.querySelector('details.subject details .slot').textContent.includes('오답입니다.')`), "오답 문구 없음");
+    assert(await page.evaluate(`[...document.querySelectorAll('details.subject details .slot .choice')].every((b) => b.disabled) && !document.querySelector('details.subject details .slot .explain')`), "잠금 안 됨 또는 해설 노출");
+    await page.evaluate(`document.querySelectorAll('details.subject details .qrow')[1].click(); true`);
+    const info2 = await page.evaluate(`(() => { const q = JSON.parse(document.getElementById('data').textContent)[0].units[0].questions[1]; return q.answer; })()`);
+    await page.evaluate(`document.querySelectorAll('details.subject details')[0].querySelectorAll('.slot')[1].querySelectorAll('.choice')[${Number(info2.split(",")[0]) - 1}].click(); true`);
+    assert(await page.evaluate(`!!document.querySelectorAll('details.subject details')[0].querySelectorAll('.slot')[1].querySelector('.explain')`), "정답인데 해설 없음");
+    await page.screenshot("offline");
+  });
+
   await scenario("390px 폭에서 가로 스크롤이 없다", async () => {
     await page.viewport(390, 844, true);
     const overflow = async () => page.evaluate(`document.documentElement.scrollWidth - document.documentElement.clientWidth`);

@@ -37,13 +37,14 @@ def test_safe_json_round_trips_and_escapes_only_dangerous_sequences():
     assert "한글" in text                                           # 한글은 이스케이프하지 않는다(UTF-8 그대로)
 
 
-def test_export_has_no_answers_or_explanations(conn):
+def test_export_contains_answers_and_grades_in_page(conn):
     html = render_html(conn)
-    for secret in ("순실현가능가치가 원가보다 낮으면", "자기주식은 자본조정이다", '"answer"', '"explanation"'):
-        assert secret not in html
+    assert "순실현가능가치가 원가보다 낮으면" in html or "저가법" in html
     questions = [q for s in export_data(conn) for u in s["units"] for q in u["questions"]]
-    assert len(questions) == 8 and all("answer" not in q and "explanation" not in q for q in questions)
-    assert "채점·풀이 기록·정답 확인 기능은 없습니다" in html
+    assert len(questions) == 8 and all(q["answer"] and q["explanation"] for q in questions)
+    for needle in ("오답입니다.", "정답입니다.", "x.disabled = true", "정답·해설 바로 보기", "풀이 기록은 남지 않습니다", 'split(",")'):
+        assert needle in html                                        # 기존 퀴즈 규칙: 즉시 잠금·오답 문구·정답 시 해설·확인만 함·복수정답
+    assert "/api/" not in html and "localStorage" not in html        # 서버·기록 없음
 
 
 def test_export_is_self_contained(conn):
