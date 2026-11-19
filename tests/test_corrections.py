@@ -79,3 +79,14 @@ def test_original_spacing_confirmed_in_pdf_is_left_alone():
     # 72-2·127-2 의 '회계처리 한' 은 원문 PDF 에도 띄어 쓴 그대로라 정정 목록에 없다
     row = connect().execute("SELECT question FROM questions WHERE id='127-2'").fetchone()
     assert "회계처리 한" in row["question"]
+
+
+def test_compound_word_line_breaks_are_joined():
+    c = connect()
+    text = lambda qid, col: c.execute(f"SELECT {col} FROM questions WHERE id=?", (qid,)).fetchone()[0]
+    assert "제조간접비" in text("72-8", "question") and "제조 간접비" not in text("72-8", "question")
+    assert "재무상태표상" in text("108-9", "choices")
+    assert "기타사외유출로" in text("114-12", "explanation")
+    assert "간이지급명세서" in text("115-12", "explanation")
+    assert "적법한 세금계산서" in text("117-14", "choices")
+    assert "단기매매증권의 원가" in text("118-1", "choices")
