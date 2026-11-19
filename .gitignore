@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.DS_Store
+.env
+# 기출 원문이 든 개인 학습용 데이터와 파생 DB
+data/bank/
+data/tutor.db
+# 사용자가 만든 실행 파일(건드리지 않음)
+전산세무튜터.app/
+전산세무튜터.command
