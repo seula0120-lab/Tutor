@@ -7,7 +7,7 @@
 import json
 import random
 
-from .notice import tax_notice
+from .notice import tax_notes, tax_notice
 
 
 def accepted_answers(answer):
@@ -22,6 +22,7 @@ def public_question(row):
         "tax": row["tax"], "unit": row["unit"], "points": row["points"], "question": row["question"],
         "choices": json.loads(row["choices"]), "multi": len(accepted_answers(row["answer"])) > 1,
         "tax_notice": tax_notice(row["subject"], row["round"]),
+        "tax_notes": tax_notes(row["subject"], row["round"], row["question"] + " " + " ".join(json.loads(row["choices"])), row["tax"]),
     }
 
 
