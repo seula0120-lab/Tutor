@@ -143,6 +143,7 @@ function renderAnswer(data) {
   const box = $("answer");
   box.replaceChildren();
   if (data.error) { box.append(el("div", { className: "result-wrong", textContent: data.error })); return; }
+  if (data.no_direct) box.append(el("div", { className: "notice", textContent: "이 주제를 직접 다룬 기출을 찾지 못했습니다. 아래는 일부 낱말만 겹치는 문항일 수 있습니다." }));
   box.append(renderSummary(data.summary));
   const ai = data.ai;
   if (ai && ai.status === "ok") {
@@ -237,8 +238,8 @@ function renderCard(q) {
                                el("div", { className: "explain", textContent: data.explanation }));
       } else {
         b.classList.add("wrong");
-        b.disabled = true;
-        result.replaceChildren(el("div", { className: "result-wrong", textContent: "오답입니다. 다시 골라 보세요." }));
+        buttons.forEach((x) => (x.disabled = true));      // 오답이면 보기를 모두 잠근다(재시도 없음)
+        result.replaceChildren(el("div", { className: "result-wrong", textContent: "오답입니다." }));
       }
     });
     return b;

@@ -81,7 +81,27 @@ def merge_sentences(entries):
 def matched_terms(text, terms):
     """문장에 들어 있는 질문 핵심어 목록(공백은 무시하고 비교). 핵심어는 질문에서 뽑은 낱말과 동의어로 넓힌 공식 용어다."""
     compact = normalize(text)
-    return [t for t in terms if normalize(t) and normalize(t) in compact]
+    found = [t for t in terms if normalize(t) and normalize(t) in compact]
+    # 긴 핵심어 안에 통째로 들어 있는 짧은 핵심어는 따로 세지 않는다(예: '비정상공손' 속의 '정상공손').
+    # 문장에서 긴 핵심어가 차지한 자리를 지운 뒤에도 남아 있을 때만 짧은 핵심어를 인정한다.
+    kept = []
+    for term in sorted(found, key=lambda t: -len(normalize(t))):
+        key = normalize(term)
+        remaining = compact
+        for longer in kept:
+            remaining = remaining.replace(normalize(longer), "\0")
+        if key in remaining:
+            kept.append(term)
+    return [t for t in found if t in kept]
+
+
+def covers_core_terms(conn, results, terms):
+    """검색 결과 중 문제 글·보기에 질문 핵심어가 하나라도 들어 있는 문항이 있는가. 결과가 없으면 False."""
+    for r in results:
+        row = conn.execute("SELECT question, choices FROM questions WHERE id = ?", (r["id"],)).fetchone()
+        if matched_terms(row["question"] + " " + " ".join(json.loads(row["choices"])), terms):
+            return True
+    return False
 
 
 def select_sentences(groups, terms):

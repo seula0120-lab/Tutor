@@ -15,7 +15,7 @@ from .analysis import unit_profile
 from .db import connect
 from .glossary import annotate, load_glossary
 from .search import DEFAULT_ROUNDS, LATEST_ROUNDS, RESULT_LIMIT, search_theory
-from .summary import build_summary
+from .summary import build_summary, covers_core_terms
 from .sync import format_report, sync_raw
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -68,7 +68,8 @@ def api_ask(conn, body):
     found = search_theory(query, conn, round_limit=parse_scope(body.get("scope")), limit=SUMMARY_LIMIT)
     summary = build_summary(conn, found["results"], found["terms"])        # 요약은 더 넓은 후보(상위 SUMMARY_LIMIT)에서 만든다
     shown = {**found, "results": found["results"][:RESULT_LIMIT]}   # 목록은 상위 RESULT_LIMIT 개만 보여 준다
-    return 200, {"search": shown, "summary": summary, "ai": explain(query, summary)}
+    return 200, {"search": shown, "summary": summary,
+                 "no_direct": not covers_core_terms(conn, found["results"], found["terms"]), "ai": explain(query, summary)}
 
 
 def dispatch(method, path, params, body, conn):

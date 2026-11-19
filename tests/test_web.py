@@ -1,3 +1,6 @@
+from pathlib import Path
+
+ROOT_PAGE = Path(__file__).resolve().parent.parent / "tutor" / "static" / "index.html"
 import json
 import random
 import threading
@@ -158,3 +161,12 @@ def test_ask_returns_summary_card_without_api_key(conn):
     assert payload["summary"]["coverage"]["questions"] >= 1
     assert payload["ai"]["status"] == "no_key"                       # 키가 없어도 카드는 나온다
     assert len(payload["search"]["results"]) <= 5
+
+
+def test_quiz_page_locks_choices_after_wrong_answer():
+    page = (ROOT_PAGE).read_text(encoding="utf-8")
+    assert "다시 골라" not in page                                   # 재시도 안내 문구 삭제
+    wrong_branch = page[page.index('b.classList.add("wrong")'):][:260]
+    assert "buttons.forEach((x) => (x.disabled = true))" in wrong_branch
+    assert "정답·해설 바로 보기" in page                              # 바로 보기 버튼은 그대로
+    assert "이 주제를 직접 다룬 기출을 찾지 못했습니다" in page

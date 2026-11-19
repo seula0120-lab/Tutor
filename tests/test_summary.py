@@ -262,3 +262,43 @@ def test_real_cards_obey_selection_rules_for_several_queries(tmp_path):
             assert all(matched_terms(i["text"], terms) for i in items), (query, key)     # 핵심어 없는 문장 없음
             counts = [len(i["matched"]) for i in items]
             assert counts == sorted(counts, reverse=True)                              # 많이 맞힌 순
+
+
+# ---- 긴 핵심어에 포함된 짧은 핵심어는 세지 않는다 ----
+def test_short_term_inside_longer_term_is_not_counted():
+    terms = ["정상공손", "비정상공손", "처리"]
+    assert matched_terms("비정상공손품원가는 기간비용으로 처리한다.", terms) == ["비정상공손", "처리"]
+    assert matched_terms("정상공손과 비정상공손을 구분한다.", terms) == ["정상공손", "비정상공손"]  # 따로 나오면 둘 다
+    assert matched_terms("정상공손은 원가에 포함한다.", terms) == ["정상공손"]
+
+
+def test_containment_rule_is_general_not_word_specific():
+    assert matched_terms("부가가치세 신고", ["가치세", "부가가치세"]) == ["부가가치세"]
+    assert matched_terms("가치세와 부가가치세", ["가치세", "부가가치세"]) == ["가치세", "부가가치세"]
+
+
+def test_containment_changes_card_order(tmp_path):
+    conn = make_conn(tmp_path, (3, [item(6, "다음 중 공손에 대한 설명으로 옳은 것은?",
+        ["비정상공손품원가는 기간비용이다.", "정상공손은 제조원가에 포함하고 비정상공손은 포함하지 않는다.", "공손품은 불량품이다.", "공손은 폐기한다."], "1,2")]))
+    found = search_theory("정상공손 비정상공손", conn, entries=[], limit=20)
+    right = build_summary(conn, found["results"], found["terms"])["right"]
+    assert right[0]["text"].startswith("정상공손은") and len(right[0]["matched"]) == 2   # 둘 다 따로 나온 문장이 먼저
+    assert right[1]["matched"] == ["비정상공손"]                                        # '비정상공손' 속 글자는 이중 계산 안 함
+
+
+# ---- 직접 다룬 기출이 없을 때 안내 ----
+def test_covers_core_terms_checks_question_and_choices(tmp_path):
+    from tutor.summary import covers_core_terms
+    conn = make_conn(tmp_path, (3, [item(1, "다음 중 저가법에 대한 설명으로 옳은 것은?", C4, "1")]))
+    hit = [{"id": "3-1"}]
+    assert covers_core_terms(conn, hit, ["저가법"]) is True
+    assert covers_core_terms(conn, hit, ["정률법", "정액법"]) is False
+    assert covers_core_terms(conn, [], ["저가법"]) is False
+
+
+def test_ask_flags_no_direct_hit(conn):
+    from tutor.web import dispatch
+    _, found = dispatch("POST", "/api/ask", {}, {"q": "저가법"}, conn)
+    assert found["no_direct"] is False
+    _, none = dispatch("POST", "/api/ask", {}, {"q": "양자컴퓨터 블록체인"}, conn)
+    assert none["no_direct"] is True and none["search"]["results"] == []
