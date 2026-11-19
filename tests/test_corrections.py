@@ -63,3 +63,19 @@ def test_73_9_choices_repaired_from_pdf():
     c = _j.loads(row["choices"])
     assert c[0].endswith("상대적으로 제조원가의 계산이 부정확함")
     assert "총생산량으로 나누어 단위당제조원가를 계산" in c[1] and "원가에 의하여 제조원가를 계산" in c[1]
+
+
+def test_pdf_checked_line_wrap_fixes_are_applied():
+    c = connect()
+    def choice(qid, i):
+        return json.loads(c.execute("SELECT choices FROM questions WHERE id=?", (qid,)).fetchone()["choices"])[i]
+    assert "경우에는" in choice("120-2", 1) and "경우에 는" not in choice("120-2", 1)
+    assert "발급하고" in choice("125-14", 1)
+    assert "자본잉여금으로" in choice("114-4", 3)
+    assert len([e for e in load_corrections() if "원문 PDF 확인" in e["reason"]]) == 14
+
+
+def test_original_spacing_confirmed_in_pdf_is_left_alone():
+    # 72-2·127-2 의 '회계처리 한' 은 원문 PDF 에도 띄어 쓴 그대로라 정정 목록에 없다
+    row = connect().execute("SELECT question FROM questions WHERE id='127-2'").fetchone()
+    assert "회계처리 한" in row["question"]
