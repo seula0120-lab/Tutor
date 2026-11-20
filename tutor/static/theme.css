@@ -221,3 +221,5 @@ h2 { font-size: 17px; margin: 0 0 var(--s2); }
 .sentence-cols li { margin: var(--s2) 0; font-size: 14px; }
 .check-btn[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 .formula-list code { white-space: normal; display: inline-block; }
+.pitfalls { background: var(--warn-soft); border-radius: var(--s2); padding: var(--s3); margin: var(--s3) 0; }
+.pitfalls h3 { margin-top: 0; }

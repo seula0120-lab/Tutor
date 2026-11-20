@@ -389,12 +389,38 @@ async function main() {
     assert(await page.evaluate(`document.getElementById('unitRun').textContent.includes('1 / 5')`), "5문제 진행 표시 없음");
   });
 
-  await scenario("공부 화면 스크린샷(라이트·다크·모바일)이 scratch/screens/study/ 에 저장된다", async () => {
+  await scenario("공부: 원가관리회계 단원 노트 → 공식·풀이 순서·자주 틀리는 지점·대표 기출 → 5문제 풀기", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/study");
+    await page.waitFor(`document.querySelectorAll('#subjects .subject-card').length === 3`, "과목 카드");
+    const units = await page.evaluate(`[...document.querySelectorAll('.subject-card[data-subject="원가회계"] .unit-link')].map((a) => a.textContent).join()`);
+    assert(units.split(",").length === 7, "원가관리회계 단원이 7개가 아님: " + units);
+    assert(!(await page.evaluate(`document.querySelector('.subject-card[data-subject="원가회계"]').textContent.includes('노트 준비 중')`)), "원가 단원에 '노트 준비 중'이 남아 있음");
+    await page.evaluate(`[...document.querySelectorAll('.subject-card[data-subject="원가회계"] .unit-link')].find((a) => a.textContent === '개별원가계산').click(); true`);
+    await page.waitFor(`location.pathname.startsWith('/study/') && document.getElementById('sec-formula') && document.querySelector('#sec-formula .choice')`, "원가 노트와 대표 기출");
+    const checks = await page.evaluate(`({
+      sub: document.querySelector('.sub').textContent,
+      formulas: document.querySelectorAll('#sec-formula .formula-list li').length,
+      steps: document.querySelectorAll('#sec-formula ol li').length,
+      pitfalls: document.querySelectorAll('#formulaPitfalls li').length,
+      badges: ['concept','practice','formula'].every((k) => document.querySelector('#sec-' + k + ' .draft-badge')),
+      confirm: document.getElementById('sec-practice').textContent.includes('확인 필요'),
+    })`);
+    assert(checks.sub.includes("원가회계") || checks.sub.includes("원가관리회계"), "과목 표시: " + checks.sub);
+    assert(checks.formulas >= 4 && checks.steps >= 3, `공식/풀이 순서가 적음: ${JSON.stringify(checks)}`);
+    assert(checks.pitfalls >= 1 && checks.pitfalls <= 2, "자주 틀리는 지점이 1~2개가 아님: " + checks.pitfalls);
+    assert(checks.badges && checks.confirm, "AI 초안 배지 또는 '확인 필요' 표시 없음");
+    await page.evaluate(`document.getElementById('unitQuizGo').click(); true`);
+    await page.waitFor(`document.querySelectorAll('#unitRun .choice').length >= 2 && document.getElementById('unitRun').textContent.includes('1 / 5')`, "5문제 풀기 열림");
+  });
+
+  await scenario("공부 화면 스크린샷 15장(라이트·다크·모바일)이 scratch/screens/study/ 에 저장된다", async () => {
     const files = [];
     const shots = {
       "공부-목록": async () => { await page.goto(base + "/study"); await page.waitFor(`document.querySelectorAll('#subjects .subject-card').length === 3`, "목록"); },
       "노트-개념": async () => { await page.goto(base + "/study/" + encodeURIComponent("재고자산")); await page.waitFor(`document.getElementById('sec-check')`, "노트"); },
       "노트-공식": async () => { await page.goto(base + "/study/" + encodeURIComponent("재고자산")); await page.waitFor(`document.getElementById('sec-formula') && document.querySelector('#sec-formula .choice')`, "공식"); await page.evaluate(`document.getElementById('sec-formula').scrollIntoView(); true`); },
+      "원가노트-공식": async () => { await page.goto(base + "/study/" + encodeURIComponent("종합원가계산")); await page.waitFor(`document.getElementById('formulaPitfalls') && document.querySelector('#sec-formula .choice')`, "원가 공식"); await page.evaluate(`document.getElementById('sec-formula').scrollIntoView(); true`); },
       "노트-5문제": async () => { await page.goto(base + "/study/" + encodeURIComponent("자본")); await page.waitFor(`document.getElementById('unitQuizGo')`, "노트"); await page.evaluate(`document.getElementById('unitQuizGo').click(); true`); await page.waitFor(`document.querySelectorAll('#unitRun .choice').length >= 2`, "5문제"); await page.evaluate(`document.getElementById('sec-quiz').scrollIntoView(); true`); },
     };
     for (const [variant, scheme, width, height, mobile] of [["light", "light", 1100, 900, false], ["dark", "dark", 1100, 900, false], ["mobile", "light", 390, 844, true]]) {
@@ -409,7 +435,7 @@ async function main() {
     }
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
-    assert(files.length === 12, "스크린샷 12장이 아님");
+    assert(files.length === 15, "스크린샷 15장이 아님");
   });
 
   const designFiles = [];

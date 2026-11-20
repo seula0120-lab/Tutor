@@ -149,6 +149,7 @@ async function showUnit(unit) {
     const f = note.formula;
     const box = section("formula", "⑤", "계산 공식", el("ul", { className: "formula-list" }, ...f.formulas.map((t) => el("li", {}, el("code", { textContent: t })))),
       el("h3", { textContent: "풀이 순서" }), el("ol", {}, ...f.steps.map((t) => el("li", { textContent: t }))));
+    if (f.pitfalls && f.pitfalls.length) box.append(el("div", { className: "pitfalls", id: "formulaPitfalls" }, el("h3", { textContent: "자주 틀리는 지점" }), el("ul", {}, ...f.pitfalls.map((t) => el("li", { textContent: t })))));
     if (f.example) { const slot = el("div"); box.append(el("h3", { textContent: `대표 기출 ${f.example.id}` }), slot); renderCard(f.example, slot); }
     draftControls(box, data.unit, "formula", isDraft("formula"));
     view.append(box);
