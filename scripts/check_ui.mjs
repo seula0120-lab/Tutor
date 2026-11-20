@@ -118,7 +118,7 @@ async function connectPage(port) {
     writeFileSync(join(dir, `${name}.png`), Buffer.from(r.data, "base64"));
     return `${name}.png`;
   };
-  const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: 9 }); };
+  const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: ({ Escape: 27, Enter: 13, Tab: 9 })[name] || 9 }); };
   const emulate = (features) => send("Emulation.setEmulatedMedia", { features });      // 예: [{name:"prefers-color-scheme", value:"dark"}]
   const viewport = (width, height, mobile) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
   return { evaluate, waitFor, goto, screenshot, pixels, shotTo, emulate, key, studyDir: STUDY_SHOTS, oxDir: OX_SHOTS, viewport, errors };
@@ -867,6 +867,13 @@ async function main() {
     assert(shape.rows === 4 && shape.th.some((c) => c.text === "보조부문" && c.col === 2) && shape.th.some((c) => c.text === "배분대상원가" && c.row === 2), "병합된 머리글이 그대로 보여야 함: " + JSON.stringify(shape.th));
     assert(shape.th.every((c) => c.scope === "col") && shape.rowHead.includes("수선부문") && shape.rowHead.includes("전력부문"), "열·행 머리글 연결(scope)");
     assert(shape.cell === "100,000원" && shape.tag === "qtable-wrap", "표 칸 값/위치: " + JSON.stringify(shape));
+    const dup = await page.evaluate(`(() => {
+      const card = document.querySelector('.paper');
+      const body = card.querySelector('.stem').textContent, all = card.textContent;
+      return { stemHas: /사용부문 제공부문|200,000원|전력부문/.test(body), stem: body, count: (all.match(/200,000원/g) || []).length, tableHas: card.querySelector('.qtable').textContent.includes('200,000원'), question: /단계배분법/.test(body) };
+    })()`);
+    assert(!dup.stemHas && dup.question, "123-8 본문에서 표 글자가 숨겨지고 물음은 남아야 함: " + dup.stem);
+    assert(dup.count === 1 && dup.tableHas, "표 글자('200,000원')가 화면에 한 번만 보임: " + dup.count);
     assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "표가 화면을 넘치지 않음");
     await sleep(200);
     await page.shotTo("표-문항-light", NUM_SHOTS);
@@ -885,7 +892,7 @@ async function main() {
     await page.viewport(1100, 900, false);
   });
 
-  await scenario("세무 문장에 시행일·개정 전 배지: 시험 기준 문구, 수치 옆 대상·기준일, 개정 전 기준 배지", async () => {
+  await scenario("세무 문장에 시행일·개정 전 배지, 숫자 말풍선(본문엔 숫자만·점선 밑줄, 누르거나 키보드로 열림)", async () => {
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
     await page.goto(base + "/study/" + encodeURIComponent("근로소득·연말정산"));
@@ -894,29 +901,52 @@ async function main() {
       basis: [...document.querySelectorAll('.concept-list .basis')].map((e) => e.textContent),
       pre: [...document.querySelectorAll('.concept-list .preamend')].map((e) => e.textContent),
       preNote: [...document.querySelectorAll('.concept-list .preamend-note')].map((e) => e.textContent),
-      nums: document.querySelectorAll('.concept-list .num-tag .numnote').length,
-      numText: (document.querySelector('.concept-list .num-tag') || {}).textContent || '',
-      numTitle: (document.querySelector('.concept-list .num-tag') || {}).title || '',
+      nums: document.querySelectorAll('.concept-list .num-tag').length,
+      plain: [...document.querySelectorAll('.concept-list .num-tag')].every((e) => !e.querySelector('*') && /^\\d/.test(e.textContent)),
+      underline: [...document.querySelectorAll('.concept-list .num-tag')].every((e) => getComputedStyle(e).textDecorationLine === 'underline' && getComputedStyle(e).textDecorationStyle === 'dotted'),
+      focusable: [...document.querySelectorAll('.concept-list .num-tag')].every((e) => e.tabIndex === 0 && e.getAttribute('role') === 'button'),
+      leaked: document.querySelector('.concept-list').textContent.includes('시행 시험) 기준'),
     })`);
-    assert(note.basis.length >= 3 && note.basis.every((t) => /^\d{4}년 \d{1,2}월 시행 시험 기준$/.test(t)), "시험 기준 문구 'YYYY년 M월 시행 시험 기준': " + JSON.stringify(note.basis));
+    assert(note.basis.length >= 3 && note.basis.every((t) => /^\d{4}년 \d{1,2}월 시행 시험 기준$/.test(t)), "문장 끝 시험 기준 문구 'YYYY년 M월 시행 시험 기준': " + JSON.stringify(note.basis));
     assert(note.pre.length >= 1 && note.pre.every((t) => t === "개정 전 기준") && note.preNote.every((t) => /’26\.\d+\.\d+/.test(t) && /p\d+/.test(t)), "개정 전 기준 배지에 적용일·쪽 표시: " + JSON.stringify(note.preNote));
-    assert(note.nums >= 1 && /\(.+ · .+\)/.test(note.numText) && /값 .+ · 단위 .+ · 적용 대상 .+ · 기준일 .+ · 출처 /.test(note.numTitle), "수치 옆 작은 글씨(대상·기준일)와 툴팁: " + note.numText + " / " + note.numTitle);
-    const changes = await page.evaluate(`[...document.querySelectorAll('#sec-changes .num-tag, .change-list .num-tag')].map((e) => e.textContent)`);
-    assert(changes.length >= 3 && changes.every((t) => t.includes("’26") || t.includes("26.1.1")), "개정 항목 수치 옆에 적용 시기(’26.1.1.): " + JSON.stringify(changes.slice(0, 2)));
-    await sleep(200);
-    await page.shotTo("세무문장-배지-light", NUM_SHOTS);
+    assert(note.nums >= 5 && note.plain && note.underline && note.focusable && !note.leaked, "본문에는 숫자만(점선 밑줄·키보드 포커스), 기준 문구가 끼어들지 않음: " + JSON.stringify(note));
+    // 누르면 말풍선
+    await page.evaluate(`document.querySelector('.concept-list .num-tag').click(); true`);
+    await page.waitFor(`document.getElementById('numPop')`, "숫자 말풍선(클릭)");
+    const pop = await page.evaluate(`(() => { const p = document.getElementById('numPop'), t = document.querySelector('.concept-list .num-tag'); const r = p.getBoundingClientRect(); return { text: p.textContent, open: t.getAttribute('aria-expanded'), inView: r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight }; })()`);
+    assert(/적용 대상.+기준일.+예외 조건.+출처/.test(pop.text) && pop.open === "true" && pop.inView, "말풍선에 적용 대상·기준일·예외 조건·출처: " + JSON.stringify(pop));
+    await sleep(150);
+    await page.shotTo("숫자말풍선-light", NUM_SHOTS);
+    await page.key("Escape");
+    await page.waitFor(`!document.getElementById('numPop')`, "Esc 로 닫힘");
+    // 키보드: 포커스 후 Enter
+    await page.evaluate(`document.querySelectorAll('.concept-list .num-tag')[1].focus(); true`);
+    await page.key("Enter");
+    await page.waitFor(`document.getElementById('numPop') && document.activeElement.getAttribute('aria-expanded') === 'true'`, "숫자 말풍선(키보드 Enter)");
+    await page.key("Escape");
+    await page.waitFor(`!document.getElementById('numPop')`, "Esc 로 닫힘(키보드)");
+    const changes = await page.evaluate(`[...document.querySelectorAll('.change-list .num-tag')].length`);
+    assert(changes >= 3, "개정 항목에도 숫자 말풍선: " + changes);
     await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    await page.evaluate(`document.querySelector('.concept-list .num-tag').click(); true`);
+    await page.waitFor(`document.getElementById('numPop')`, "다크 말풍선");
     await sleep(250);
-    await page.shotTo("세무문장-배지-dark", NUM_SHOTS);
+    await page.shotTo("숫자말풍선-dark", NUM_SHOTS);
+    await page.key("Escape");
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await sleep(150);
+    await page.shotTo("세무문장-배지-light", NUM_SHOTS);
     await page.viewport(390, 844, true);
     await page.goto(base + "/study/" + encodeURIComponent("근로소득·연말정산"));
     await page.waitFor(`document.querySelector('.concept-list .num-tag')`, "모바일 노트");
     assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤 없음");
+    await page.evaluate(`document.querySelector('.concept-list .num-tag').click(); true`);
+    await page.waitFor(`document.getElementById('numPop')`, "모바일 말풍선");
+    assert(await page.evaluate(`(() => { const r = document.getElementById('numPop').getBoundingClientRect(); return r.left >= 0 && r.right <= window.innerWidth; })()`), "모바일 말풍선이 화면 안");
     await sleep(200);
-    await page.shotTo("세무문장-배지-mobile", NUM_SHOTS);
+    await page.shotTo("숫자말풍선-mobile", NUM_SHOTS);
+    await page.key("Escape");
     await page.viewport(1100, 900, false);
-    // 문제 화면(세무 문항)과 O/X: 같은 문구가 보인다
     const q = await page.evaluate(`api('/api/question?round=127&number=12').then((r) => r.data)`);
     assert(q.subject === "세무회계" && q.exam_basis === "2026년 8월 시행 시험 기준", "세무 문항에 시험 기준 문구: " + JSON.stringify([q.subject, q.exam_basis]));
   });

@@ -102,7 +102,32 @@ function renderTables(tables) {
   });
 }
 
-// 구조화한 수치(numbers.py): 문장 속 수치마다 옆에 작은 글씨로 적용 대상·기준일을 붙인다. 마우스를 올리면 단위·예외 조건·출처까지 보인다.
+// 구조화한 수치(numbers.py): 본문에는 숫자만 두고 점선 밑줄을 긋는다. 누르거나(Enter·Space 포함) 마우스를 올리면 말풍선으로 적용 대상·기준일·예외 조건·출처를 보인다. Esc·바깥 클릭으로 닫는다.
+let numPop = null, numPopOwner = null;
+function closeNumPop() {
+  if (numPop) numPop.remove();
+  if (numPopOwner) numPopOwner.setAttribute("aria-expanded", "false");
+  numPop = numPopOwner = null;
+}
+function openNumPop(tag, n) {
+  if (numPopOwner === tag) return;
+  closeNumPop();
+  const row = (label, value) => el("div", { className: "numpop-row" }, el("b", { textContent: label }), ` ${value || "없음"}`);
+  numPop = el("div", { className: "numpop", role: "tooltip", id: "numPop" },
+    el("div", { className: "numpop-head", textContent: `${n.token} (${n.unit})` }),
+    row("적용 대상", n.applies_to), row("기준일", n.as_of), row("예외 조건", n.exception), row("출처", n.source));
+  document.body.append(numPop);
+  numPopOwner = tag;
+  tag.setAttribute("aria-expanded", "true");
+  tag.setAttribute("aria-describedby", "numPop");
+  const r = tag.getBoundingClientRect(), w = numPop.offsetWidth;
+  numPop.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left))}px`;
+  numPop.style.top = `${r.bottom + 6}px`;
+  if (numPop.getBoundingClientRect().bottom > window.innerHeight) numPop.style.top = `${Math.max(8, r.top - numPop.offsetHeight - 6)}px`;
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeNumPop(); });
+document.addEventListener("click", (e) => { if (numPopOwner && !numPopOwner.contains(e.target) && !(numPop && numPop.contains(e.target))) closeNumPop(); });
+
 function numberedNodes(text, items) {
   const nodes = [];
   let pos = 0;
@@ -110,9 +135,14 @@ function numberedNodes(text, items) {
     const i = text.indexOf(n.token, pos);
     if (i < 0) continue;
     if (i > pos) nodes.push(document.createTextNode(text.slice(pos, i)));
-    const tag = el("span", { className: "num-tag" }, el("b", { textContent: n.token }),
-      el("small", { className: "numnote", textContent: ` (${n.applies_to.length > 18 ? "…" + n.applies_to.slice(-18) : n.applies_to} · ${n.as_of})` }));
-    tag.title = `값 ${n.value} · 단위 ${n.unit} · 적용 대상 ${n.applies_to} · 기준일 ${n.as_of}${n.exception ? " · 예외 " + n.exception : ""} · 출처 ${n.source}`;
+    const tag = el("span", { className: "num-tag", textContent: n.token, tabIndex: 0 });
+    tag.setAttribute("role", "button");
+    tag.setAttribute("aria-expanded", "false");
+    tag.setAttribute("aria-label", `${n.token}, 적용 대상과 기준일 보기`);
+    tag.addEventListener("click", (e) => { e.stopPropagation(); numPopOwner === tag ? closeNumPop() : openNumPop(tag, n); });
+    tag.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); numPopOwner === tag ? closeNumPop() : openNumPop(tag, n); } });
+    tag.addEventListener("mouseenter", () => openNumPop(tag, n));
+    tag.addEventListener("mouseleave", (e) => { if (!(numPop && e.relatedTarget && numPop.contains(e.relatedTarget))) closeNumPop(); });
     nodes.push(tag);
     pos = i + n.token.length;
   }
@@ -134,7 +164,7 @@ function renderCard(q, container, onResult = () => {}) {
   container.classList.add("paper");                          // 시험지 카드 모양(theme.css)
   container.classList.remove("locked");
   container.append(el("div", { className: "meta", textContent: `${q.id} (${q.round}회 ${q.number}번) · ${pathOf(q)} · ${q.points}점` }),
-                   el("div", { className: "stem", textContent: q.question }));
+                   el("div", { className: "stem", textContent: q.question_view || q.question }));
   container.append(...renderTables(q.tables));
   for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) container.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
   if (q.exam_basis || (q.pre_amend || []).length) container.append(el("div", { className: "basis-row" }, ...basisBadges(q)));

@@ -114,7 +114,7 @@ def pool(conn):
             old_tax = head["subject"] == TAX_SUBJECT and not exam_dates.is_recent(latest_round, latest, day_by_round, LATEST_ROUNDS)
             items[key] = {"key": key, "text": g["text"], "truth": truth, "sources": g["sources"], "count": g["count"],
                           "latest_round": latest_round, "subject": head["subject"], "tax": head["tax"], "unit": head["unit"],
-                          "stem": display_stem(head["question"]), "old_tax": old_tax, "tax_label": (g["tax_notice"] or OLD_TAX_LABEL) if old_tax else "",
+                          "stem": tables.view_text(display_stem(head["question"]), tables.for_question(head["id"]))[0], "old_tax": old_tax, "tax_label": (g["tax_notice"] or OLD_TAX_LABEL) if old_tax else "",
                           "tables": tables.for_question(head["id"]), "exam_basis": g["exam_basis"] or "", "pre_amend": amend.badges(head["unit"], g["text"], g["exam_day"]) if g["exam_basis"] else []}
     _cache.update(signature=signature, items=items)
     return items

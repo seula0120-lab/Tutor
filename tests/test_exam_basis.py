@@ -198,3 +198,38 @@ def test_ox_old_tax_follows_exam_dates_when_present(tmp_path):
     assert item["old_tax"] is False                                         # 시행일이 18개월 안이라 최근
     assert item["exam_basis"] == ""                                         # 화면 문구는 data/exam_dates.json(진짜 시행일)에서만 만든다
     conn.close()
+
+
+# ── 표 글자 숨김(화면용 본문) ─────────────────────────────
+def test_table_text_hidden_only_where_a_contiguous_run_is_found():
+    from tutor import quiz
+    from tutor.db import connect as _c
+    conn = _c()
+    row = quiz.get_row(conn, "123-8")
+    q = quiz.public_question(row)
+    assert q["table_text_hidden"] is True
+    assert "사용부문 제공부문" not in q["question_view"] and "200,000원" not in q["question_view"]
+    assert q["question_view"].startswith("두 개의 보조부문") and q["question_view"].endswith("먼저 배분한다.")   # 물음·단서는 남는다
+    assert "사용부문 제공부문" in q["question"] and "200,000원" in q["question"]                           # 원문은 그대로(검색 색인도 원문)
+    fts = conn.execute("SELECT content FROM theory_fts WHERE question_id = '123-8'").fetchone()["content"]
+    assert "200,000원" in fts
+    conn.close()
+
+
+def test_view_text_keeps_text_when_no_run_or_no_table():
+    table = {"cells": [{"r": 0, "c": 0, "text": "구분 갑 을 병"}, {"r": 1, "c": 0, "text": "매출 100원 200원"}]}
+    assert tables.view_text("관계없는 문장이다. 다음 중 옳은 것은?", [table]) == ("관계없는 문장이다. 다음 중 옳은 것은?", False)
+    assert tables.view_text("문장이다. 구분 갑 을 병 매출 100원 200원 물음은?", []) == ("문장이다. 구분 갑 을 병 매출 100원 200원 물음은?", False)
+    assert tables.view_text("문장이다. 구분 갑 을 병 매출 100원 200원 물음은?", [table]) == ("문장이다. 물음은?", True)
+    assert tables.view_text("문장이다. 구분 갑 매출 물음은?", [table]) == ("문장이다. 구분 갑 매출 물음은?", False)   # 표 낱말의 80%를 못 채우면 숨기지 않는다
+    assert tables.view_text("표 구분 갑 을 병 매출 앞뒤", [table])[1] is False                                # 7낱말 중 5개(71%)만 이어짐 → 그대로
+
+
+def test_hidden_count_on_real_tables():
+    from tutor import quiz
+    from tutor.db import connect as _c
+    conn = _c()
+    ids = sorted({t["id"] for t in json.loads(tables.PATH.read_text(encoding="utf-8"))["tables"]})
+    hidden = [i for i in ids if quiz.public_question(quiz.get_row(conn, i))["table_text_hidden"]]
+    assert len(ids) == 64 and len(hidden) >= 60
+    conn.close()

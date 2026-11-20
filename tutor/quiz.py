@@ -33,6 +33,7 @@ def public_question(row):
         "exam_basis": exam_basis(row["subject"], row["round"]),
         "pre_amend": amend.badges(row["unit"], row["question"] + " " + " ".join(json.loads(row["choices"])), exam_day(row["round"])) if row["subject"] == "세무회계" else [],
         "tables": tables.for_question(row["id"]),
+        **dict(zip(("question_view", "table_text_hidden"), tables.view_text(row["question"], tables.for_question(row["id"])))),
         "tax_notes": tax_notes(row["subject"], row["round"], row["question"] + " " + " ".join(json.loads(row["choices"])), row["tax"]),
     }
 

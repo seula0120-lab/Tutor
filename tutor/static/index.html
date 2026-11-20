@@ -374,7 +374,7 @@ $("mockStart").addEventListener("click", async () => {
   };
   data.questions.forEach((q, n) => {
     const item = el("div", { className: "hit", id: `mq-${n + 1}` }, el("div", { className: "meta", textContent: `${n + 1}번 · ${q.subject}${q.tax ? " › " + q.tax : ""}` }),
-                    el("div", { className: "stem", textContent: q.question }), ...renderTables(q.tables));
+                    el("div", { className: "stem", textContent: q.question_view || q.question }), ...renderTables(q.tables));
     if (q.exam_basis || (q.pre_amend || []).length) item.append(el("div", { className: "basis-row" }, ...basisBadges(q)));
     for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) item.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
     const buttons = q.choices.map((text, i) => {
