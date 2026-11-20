@@ -11,10 +11,12 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = join(ROOT, "scratch", "screens");
 const DESIGN_SHOTS = join(SHOTS, "design");
+const STUDY_SHOTS = join(SHOTS, "study");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
 mkdirSync(SHOTS, { recursive: true });
 mkdirSync(DESIGN_SHOTS, { recursive: true });
+mkdirSync(STUDY_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
@@ -81,15 +83,15 @@ async function connectPage(port) {
     const r = await send("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(SHOTS, `${String(++shot).padStart(2, "0")}-${name}.png`), Buffer.from(r.data, "base64"));
   };
-  const shotTo = async (name) => {                                  // 디자인 스크린샷: scratch/screens/design/<이름>.png
+  const shotTo = async (name, dir = DESIGN_SHOTS) => {              // 디자인 스크린샷: scratch/screens/design/<이름>.png (dir 로 폴더 변경)
     const r = await send("Page.captureScreenshot", { format: "png" });
-    writeFileSync(join(DESIGN_SHOTS, `${name}.png`), Buffer.from(r.data, "base64"));
+    writeFileSync(join(dir, `${name}.png`), Buffer.from(r.data, "base64"));
     return `${name}.png`;
   };
   const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: 9 }); };
   const emulate = (features) => send("Emulation.setEmulatedMedia", { features });      // 예: [{name:"prefers-color-scheme", value:"dark"}]
   const viewport = (width, height, mobile) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
-  return { evaluate, waitFor, goto, screenshot, shotTo, emulate, key, viewport, errors };
+  return { evaluate, waitFor, goto, screenshot, shotTo, emulate, key, studyDir: STUDY_SHOTS, viewport, errors };
 }
 
 // 128회 1번 같은 문항의 정답 번호(들): 로컬 기출 파일에서 읽는다(화면에는 풀기 전에 정답이 없으므로 점검 스크립트만 안다).
@@ -353,6 +355,61 @@ async function main() {
     await page.goto(base + "/#mock");
     await page.waitFor(`document.querySelector('.tab.active').dataset.tab === 'mock'`, "해시 링크로 모의고사 탭 열림");
     await page.viewport(1100, 900, false);
+  });
+
+  await scenario("공부: 탭 → 재무 단원 노트 → 읽음 체크 → 진도율 반영 → 5문제 풀기", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/");
+    await page.evaluate(`document.querySelector('.topbar .tab-link[href="/study"]').click(); true`);
+    await page.waitFor(`location.pathname === '/study' && document.querySelectorAll('#subjects .subject-card').length === 3`, "과목 카드 3개");
+    const cardText = (subject) => `(document.querySelector('.subject-card[data-subject="${subject}"] .progress-text') || {}).textContent || ''`;
+    const labels = await page.evaluate(`[...document.querySelectorAll('.subject-card h2')].map((h) => h.textContent)`);
+    assert(labels.join() === "재무회계,원가관리회계,세무회계", "과목 카드 이름: " + labels.join());
+    assert((await page.evaluate(cardText("재무회계"))).includes("진도율 0% · 읽음·이해함 0/12"), "처음 진도율이 0 이 아님: " + await page.evaluate(cardText("재무회계")));
+    assert(await page.evaluate(`document.querySelectorAll('#roadmap .road-row').length >= 8 && !!document.querySelector('#roadmap .road-row .btn')`), "복귀 로드맵 줄/노트 열기 버튼 없음");
+    await page.evaluate(`[...document.querySelectorAll('.subject-card[data-subject="재무회계"] .unit-link')].find((a) => a.textContent === '재고자산').click(); true`);
+    await page.waitFor(`location.pathname.startsWith('/study/') && document.getElementById('sec-check')`, "단원 노트");
+    const sections = await page.evaluate(`[...document.querySelectorAll('.study-section')].map((s) => s.dataset.section).join()`);
+    assert(sections === "glance,concept,practice,sentences,formula,changes,quiz,check", "노트 칸 구성: " + sections);
+    assert(await page.evaluate(`document.querySelectorAll('#sec-glance .stat').length === 4 && document.querySelectorAll('#sec-concept .concept-list li').length >= 5 && document.querySelectorAll('#sec-sentences .src-badge').length > 0`), "한눈에/개념/기출 문장 칸이 비어 있음");
+    assert(await page.evaluate(`['concept','practice','formula'].every((k) => document.querySelector('#sec-' + k + ' .draft-badge'))`), "AI 초안 배지 없음");
+    await page.evaluate(`document.querySelector('#sec-concept .term-chip').click(); true`);
+    await page.waitFor(`!document.getElementById('termMeaning').hidden && document.getElementById('termMeaning').textContent.length > 5`, "용어 뜻 표시");
+    await page.evaluate(`document.querySelector('#sec-concept .small-btn').click(); true`);
+    await page.waitFor(`!document.querySelector('#sec-concept .draft-badge') && document.querySelector('#sec-concept .reviewed-badge')`, "검토 완료 후 배지 사라짐");
+    await page.evaluate(`document.getElementById('check-read').click(); true`);
+    await page.waitFor(`document.getElementById('checkInfo').textContent.includes('읽음') && /진도율 [1-9]\\d*%/.test(document.getElementById('checkInfo').textContent)`, "읽음 체크 후 진도율");
+    await page.goto(base + "/study");
+    await page.waitFor(`document.querySelectorAll('#subjects .subject-card').length === 3`, "목록 다시 열기");
+    assert((await page.evaluate(cardText("재무회계"))).includes("읽음·이해함 1/12"), "진도율이 목록에 반영되지 않음: " + await page.evaluate(cardText("재무회계")));
+    await page.goto(base + "/study/" + encodeURIComponent("재고자산"));
+    await page.waitFor(`document.getElementById('unitQuizGo') && !document.querySelector('#sec-concept .draft-badge')`, "검토 완료 상태 유지");
+    await page.evaluate(`document.getElementById('unitQuizGo').click(); true`);
+    await page.waitFor(`document.querySelectorAll('#unitRun .choice').length >= 2`, "5문제 풀기 열림");
+    assert(await page.evaluate(`document.getElementById('unitRun').textContent.includes('1 / 5')`), "5문제 진행 표시 없음");
+  });
+
+  await scenario("공부 화면 스크린샷(라이트·다크·모바일)이 scratch/screens/study/ 에 저장된다", async () => {
+    const files = [];
+    const shots = {
+      "공부-목록": async () => { await page.goto(base + "/study"); await page.waitFor(`document.querySelectorAll('#subjects .subject-card').length === 3`, "목록"); },
+      "노트-개념": async () => { await page.goto(base + "/study/" + encodeURIComponent("재고자산")); await page.waitFor(`document.getElementById('sec-check')`, "노트"); },
+      "노트-공식": async () => { await page.goto(base + "/study/" + encodeURIComponent("재고자산")); await page.waitFor(`document.getElementById('sec-formula') && document.querySelector('#sec-formula .choice')`, "공식"); await page.evaluate(`document.getElementById('sec-formula').scrollIntoView(); true`); },
+      "노트-5문제": async () => { await page.goto(base + "/study/" + encodeURIComponent("자본")); await page.waitFor(`document.getElementById('unitQuizGo')`, "노트"); await page.evaluate(`document.getElementById('unitQuizGo').click(); true`); await page.waitFor(`document.querySelectorAll('#unitRun .choice').length >= 2`, "5문제"); await page.evaluate(`document.getElementById('sec-quiz').scrollIntoView(); true`); },
+    };
+    for (const [variant, scheme, width, height, mobile] of [["light", "light", 1100, 900, false], ["dark", "dark", 1100, 900, false], ["mobile", "light", 390, 844, true]]) {
+      await page.viewport(width, height, mobile);
+      await page.emulate([{ name: "prefers-color-scheme", value: scheme }]);
+      for (const [name, setup] of Object.entries(shots)) {
+        await setup();
+        await sleep(300);
+        if ((await page.evaluate(`document.documentElement.scrollWidth - document.documentElement.clientWidth`)) > 0) throw new Error(`${name}-${variant}: 가로 스크롤 생김`);
+        files.push(await page.shotTo(`${name}-${variant}`, page.studyDir));
+      }
+    }
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(1100, 900, false);
+    assert(files.length === 12, "스크린샷 12장이 아님");
   });
 
   const designFiles = [];

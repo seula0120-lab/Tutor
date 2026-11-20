@@ -22,9 +22,9 @@ function choiceButton(i, text) {
 }
 
 // 위쪽 고정 바와 알약 탭. 홈 화면은 자체 탭(button)을 쓰고, 다른 화면은 이 함수가 링크 탭을 그린다. active: 켜 둘 탭 이름.
-const TABS = [["ask", "질문"], ["answers", "기출 답안"], ["notebook", "오답노트"], ["mock", "모의고사"], ["analysis", "문제 분석"], ["words", "단어 주석"], ["toc", "목차"]];
+const TABS = [["ask", "질문"], ["answers", "기출 답안"], ["notebook", "오답노트"], ["mock", "모의고사"], ["analysis", "문제 분석"], ["words", "단어 주석"], ["study", "공부"], ["toc", "목차"]];
 function renderTopbar(active) {
-  const links = TABS.map(([name, label]) => el("a", { className: "tab-link" + (name === active ? " active" : ""), href: name === "toc" ? "/toc" : `/#${name}`, textContent: label }));
+  const links = TABS.map(([name, label]) => el("a", { className: "tab-link" + (name === active ? " active" : ""), href: name === "toc" ? "/toc" : name === "study" ? "/study" : `/#${name}`, textContent: label }));
   return el("header", { className: "topbar" }, el("div", { className: "topbar-inner" },
     el("a", { className: "brand", href: "/", textContent: "회계튜터" }, el("small", { textContent: " 전산세무 1급 이론" })), el("div", { className: "tabs-wrap" }, el("nav", { className: "tabs", ariaLabel: "화면 이동" }, ...links))));
 }

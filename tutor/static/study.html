@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>공부 · 전산세무 1급 이론</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main id="view"></main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("study");
+const STATUS_LABEL = { "": "아직 안 봄", read: "읽음", understood: "이해함" };
+const unitHref = (unit) => "/study/" + encodeURIComponent(unit);
+const subjectPath = (x) => [x.subject, x.tax].filter(Boolean).join(" › ");
+const percent = (p) => Math.round(p * 100) + "%";
+const statusChip = (status) => el("span", { className: "status-chip " + (status || "none"), textContent: STATUS_LABEL[status || ""] });
+
+// ------------------------------------------------------------------ /study : 과목 카드 + 복귀 로드맵
+async function showOverview() {
+  const { data } = await api("/api/study");
+  const view = $("view");
+  view.replaceChildren(el("h1", { textContent: "공부" }),
+    el("div", { className: "sub", textContent: "과목별 개념을 다시 잡는 학습 노트입니다. 기출 검색은 '질문' 탭에서 합니다." }));
+  view.append(roadmapBox(data.roadmap));
+  const grid = el("div", { className: "subject-grid", id: "subjects" });
+  for (const card of data.cards) grid.append(subjectCard(card));
+  view.append(grid);
+}
+
+function roadmapBox(rows) {
+  const box = el("section", { className: "box", id: "roadmap" }, el("h2", { textContent: "4년 만의 복귀 순서" }),
+    el("div", { className: "small", textContent: "점수 = 회당 배점 × 최근 10회 출제율이 큰 단원부터. 오답노트에 남은 문항이 있는 단원은 점수와 상관없이 앞으로 옵니다." }));
+  const list = el("ol", { className: "road-list" });
+  const row = (r, n) => Object.assign(el("li", { className: "road-row" },
+    el("span", { className: "road-no", textContent: n }),
+    el("span", { className: "road-main" }, el("b", { textContent: r.unit }), el("span", { className: "small", textContent: ` ${subjectPath(r)} · 회당 ${r.points_per_round}점 × 최근 10회 출제율 ${percent(r.recent_rate)} = ${r.score}` }),
+      ...(r.wrong_open ? [el("span", { className: "wrong-chip", textContent: `오답 ${r.wrong_open}` })] : [])),
+    statusChip(r.status),
+    el("a", { className: "btn", href: unitHref(r.unit), textContent: "노트 열기" })), { });
+  rows.slice(0, 8).forEach((r, i) => list.append(row(r, i + 1)));
+  box.append(list);
+  if (rows.length > 8) {
+    const more = el("ol", { className: "road-list", start: 9 });
+    rows.slice(8).forEach((r, i) => more.append(row(r, i + 9)));
+    box.append(el("details", {}, el("summary", { textContent: `나머지 ${rows.length - 8}개 단원 보기` }), more));
+  }
+  return box;
+}
+
+function subjectCard(card) {
+  const bar = el("div", { className: "progress", role: "progressbar", ariaLabel: `${card.label} 진도율`, ariaValueMin: "0", ariaValueMax: "100", ariaValueNow: String(Math.round(card.progress * 100)) },
+    el("span", { style: `width:${percent(card.progress)}` }));
+  const box = el("section", { className: "box subject-card" },
+    el("h2", { textContent: card.label }), bar,
+    el("div", { className: "small progress-text", textContent: `진도율 ${percent(card.progress)} · 읽음·이해함 ${card.done}/${card.total} 단원 (이해함 ${card.understood})` }));
+  box.dataset.subject = card.subject;
+  const groups = card.taxes.length ? card.taxes : [""];
+  for (const tax of groups) {
+    if (tax) box.append(el("h3", { textContent: tax }));
+    const list = el("ul", { className: "unit-list" });
+    for (const u of card.units.filter((x) => x.tax === tax)) {
+      list.append(el("li", {}, el("a", { href: unitHref(u.unit), className: "unit-link", textContent: u.unit }),
+        el("span", { className: "small", textContent: ` 회당 ${u.points_per_round}점` }), statusChip(u.status),
+        ...(u.has_note ? [] : [el("span", { className: "small soon", textContent: "노트 준비 중" })])));
+    }
+    box.append(list);
+  }
+  return box;
+}
+
+// ------------------------------------------------------------------ /study/<단원> : 학습 노트
+function section(key, number, title, ...children) {
+  const box = el("section", { className: "box study-section", id: `sec-${key}` }, el("h2", {}, el("span", { className: "sec-no", textContent: number }), title), ...children);
+  box.dataset.section = key;
+  return box;
+}
+
+// AI 초안 칸 머리: 'AI 초안 · 검토 필요' 배지와 '검토 완료' 버튼. 검토 완료로 바꾸면 배지가 사라진다(서버 DB 저장).
+function draftControls(box, unit, key, isDraft) {
+  const holder = el("span", { className: "draft-holder" });
+  const paint = (draft) => {
+    holder.replaceChildren();
+    if (draft) {
+      const mark = el("button", { className: "ghost small-btn", textContent: "검토 완료로 표시" });
+      mark.addEventListener("click", async () => { await api("/api/study/review", { unit, section: key, reviewed: true }); paint(false); });
+      holder.append(el("span", { className: "draft-badge", textContent: "AI 초안 · 검토 필요" }), " ", mark);
+    } else {
+      const undo = el("button", { className: "ghost small-btn", textContent: "검토 취소" });
+      undo.addEventListener("click", async () => { await api("/api/study/review", { unit, section: key, reviewed: false }); paint(true); });
+      holder.append(el("span", { className: "reviewed-badge", textContent: "검토 완료" }), " ", undo);
+    }
+  };
+  paint(isDraft);
+  box.querySelector("h2").append(" ", holder);
+}
+
+const empty = (text) => el("div", { className: "small", textContent: text });
+
+async function showUnit(unit) {
+  const { ok, data } = await api("/api/study/note?" + query({ unit }));
+  const view = $("view");
+  if (!ok) { view.replaceChildren(el("h1", { textContent: "공부" }), el("div", { className: "result-wrong", textContent: data.error }), el("a", { href: "/study", textContent: "← 공부 목록" })); return; }
+  document.title = `${data.unit} · 공부`;
+  view.replaceChildren(el("a", { href: "/study", textContent: "← 공부 목록" }), el("h1", { textContent: data.unit }), el("div", { className: "sub", textContent: subjectPath(data) }));
+  const note = data.note;
+  const isDraft = (key) => data.drafts.includes(key);
+
+  // ① 한눈에
+  const ov = data.overview;
+  const stat = (label, value) => el("div", { className: "stat" }, el("div", { className: "stat-value", textContent: value }), el("div", { className: "small", textContent: label }));
+  view.append(section("glance", "①", "한눈에", el("div", { className: "stat-row" },
+    stat("출제 문항 수", `${ov.questions}문항`), stat("출제 회차 수", `${ov.rounds}회차`), stat("최근 출제 회차", `${ov.latest_round}회`), stat("회당 배점", `${ov.points_per_round}점`))));
+
+  // ② 개념 정리
+  const concept = section("concept", "②", "개념 정리");
+  if (note) {
+    const meaning = el("div", { className: "meaning-box", id: "termMeaning", hidden: true });
+    concept.append(el("ul", { className: "concept-list" }, ...note.concept.lines.map((l) => el("li", { textContent: l.text }, ...(l.sources.length ? [" ", ...l.sources.map((s) => el("span", { className: "src-badge", textContent: s }))] : [])))),
+      el("div", { className: "term-row" }, el("b", { textContent: "핵심 용어 " }), ...note.concept.terms.map((t) => {
+        const chip = el("button", { className: "ghost chip term-chip", textContent: t.term });
+        chip.addEventListener("click", () => { meaning.hidden = false; meaning.replaceChildren(el("b", { textContent: t.term + " : " }), t.meaning || "단어 주석 사전에 아직 뜻이 없습니다."); });
+        return chip;
+      })), meaning);
+    draftControls(concept, data.unit, "concept", isDraft("concept"));
+  } else concept.append(empty(`노트 준비 중입니다. (data/study/${data.subject}/${data.unit}.json 이 아직 없습니다)`));
+  view.append(concept);
+
+  // ③ 실무에서 보던 것
+  const practice = section("practice", "③", "실무에서 보던 것 (KcLep)");
+  if (note) { practice.append(el("ul", {}, ...note.practice.map((t) => el("li", { textContent: t })))); draftControls(practice, data.unit, "practice", isDraft("practice")); }
+  else practice.append(empty("노트 준비 중입니다."));
+  view.append(practice);
+
+  // ④ 시험에 나온 문장
+  const sentences = section("sentences", "④", "시험에 나온 문장", el("div", { className: "small", textContent: "이 단원 기출에서 뽑은 문장입니다(최근 회차 우선, 같은 문장은 합침). 문항 유형은 자동 판별이라 틀릴 수 있습니다." }));
+  const sentenceList = (items, cls, title) => el("div", { className: cls }, el("h3", { textContent: title }),
+    items.length ? el("ul", {}, ...items.map((s) => el("li", {}, s.text, " ", ...s.sources.slice(0, 3).map((id) => el("span", { className: "src-badge", textContent: id })),
+      el("span", { className: "small", textContent: ` 최근 ${s.latest_round}회${s.count > 1 ? ` · ${s.count}회 출제` : ""}` }), ...(s.tax_notice ? [" ", el("span", { className: "taxflag", textContent: s.tax_notice })] : []))))
+      : empty("이 단원에서 문장으로 쓸 수 있는 기출이 없습니다."));
+  sentences.append(el("div", { className: "sentence-cols" }, sentenceList(data.sentences.right, "okc", "맞는 문장"), sentenceList(data.sentences.traps, "trap", "함정(틀린 문장으로 출제)")),
+    el("div", { className: "small", textContent: `문장으로 쓰지 않은 문항(계산·조합·식별형 등) ${data.sentences.excluded_count}개는 아래 5문제 풀기나 기출 답안 탭에서 풉니다.` }));
+  view.append(sentences);
+
+  // ⑤ 계산 공식(있는 단원만)
+  if (note && note.formula) {
+    const f = note.formula;
+    const box = section("formula", "⑤", "계산 공식", el("ul", { className: "formula-list" }, ...f.formulas.map((t) => el("li", {}, el("code", { textContent: t })))),
+      el("h3", { textContent: "풀이 순서" }), el("ol", {}, ...f.steps.map((t) => el("li", { textContent: t }))));
+    if (f.example) { const slot = el("div"); box.append(el("h3", { textContent: `대표 기출 ${f.example.id}` }), slot); renderCard(f.example, slot); }
+    draftControls(box, data.unit, "formula", isDraft("formula"));
+    view.append(box);
+  }
+
+  // ⑥ 2022년 이후 바뀐 것(세무 단원용)
+  const changes = section("changes", "⑥", "2022년 이후 바뀐 것");
+  if (note && note.changes.length) changes.append(el("ul", {}, ...note.changes.map((c) => el("li", { textContent: typeof c === "string" ? c : c.text }))));
+  else changes.append(empty(data.subject === "세무회계" ? "아직 작성하지 않았습니다." : "세무 단원용 칸이라 재무회계·원가회계는 비워 둡니다."));
+  view.append(changes);
+
+  // ⑦ 5문제 풀기
+  const runBox = el("div", { id: "unitRun" });
+  const go = el("button", { id: "unitQuizGo", textContent: "5문제 풀기" });
+  go.addEventListener("click", async () => {
+    const res = await api("/api/quiz_set?" + query({ subject: data.subject, tax: data.tax, unit: data.unit, count: 5 }));
+    if (!res.ok) { runBox.replaceChildren(el("div", { className: "notice", textContent: res.data.error })); return; }
+    runSession(res.data.ids, runBox, `${data.unit} 5문제`);
+  });
+  view.append(section("quiz", "⑦", "이 단원 5문제 풀기", el("div", { className: "small", textContent: "아직 못 맞힌 문항부터 나옵니다. 오답이면 보기가 잠기고 오답노트에 남습니다." }), el("div", { className: "row" }, go), runBox));
+
+  // ⑧ 체크
+  const status = el("div", { className: "small", id: "checkInfo" });
+  const buttons = {};
+  let current = data.status;
+  const paint = () => Object.entries(buttons).forEach(([key, b]) => b.setAttribute("aria-pressed", String(current === key)));
+  for (const [key, label] of [["read", "읽음"], ["understood", "이해함"]]) {
+    buttons[key] = el("button", { className: "ghost check-btn", textContent: label, id: `check-${key}` });
+    buttons[key].addEventListener("click", async () => {
+      const next = current === key ? "" : key;                         // 같은 버튼을 다시 누르면 되돌린다
+      const res = await api("/api/study/progress", { unit: data.unit, status: next });
+      if (!res.ok) return;
+      current = next;
+      paint();
+      const card = res.data.cards.find((c) => c.subject === data.subject);
+      status.textContent = `표시: ${STATUS_LABEL[current]} · ${card.label} 진도율 ${percent(card.progress)} (${card.done}/${card.total} 단원)`;
+    });
+  }
+  paint();
+  status.textContent = `표시: ${STATUS_LABEL[current]}`;
+  view.append(section("check", "⑧", "체크", el("div", { className: "row" }, buttons.read, buttons.understood), status));
+}
+
+const parts = decodeURIComponent(location.pathname).split("/").filter(Boolean);
+if (parts.length >= 2) showUnit(parts.slice(1).join("/")); else showOverview();
+</script>
+</body>
+</html>
