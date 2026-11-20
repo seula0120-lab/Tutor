@@ -192,7 +192,7 @@ function renderAnswer(data) {
   for (const r of s.results) {
     const row = el("div", { className: "hit" });
     row.append(el("div", { className: "meta", textContent: `출처 ${r.id} (${r.round}회 ${r.number}번) · ${[r.subject, r.tax, r.unit].filter(Boolean).join(" › ")}` }),
-               ...(r.tax_notice ? [el("span", { className: "taxflag", textContent: r.tax_notice })] : []),
+               ...(r.tax_notice ? [el("span", { className: "taxflag", textContent: r.tax_notice })] : []), ...basisBadges(r),
                el("div", { textContent: r.question }));
     const open = el("button", { className: "ghost", textContent: "문제·해설 열기" });
     open.style.marginTop = "4px";
@@ -208,6 +208,7 @@ function sentenceList(items) {
   for (const it of items) {
     const li = el("li", {}, ...highlight(it.text, it.matched), " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""} · 핵심어 ${it.matched.join(", ")})` }));
     if (it.tax_notice) li.append(" ", el("span", { className: "taxflag", textContent: it.tax_notice }));
+    li.append(" ", ...basisBadges(it));
     ul.append(li);
   }
   return ul;
@@ -373,7 +374,8 @@ $("mockStart").addEventListener("click", async () => {
   };
   data.questions.forEach((q, n) => {
     const item = el("div", { className: "hit", id: `mq-${n + 1}` }, el("div", { className: "meta", textContent: `${n + 1}번 · ${q.subject}${q.tax ? " › " + q.tax : ""}` }),
-                    el("div", { className: "stem", textContent: q.question }));
+                    el("div", { className: "stem", textContent: q.question }), ...renderTables(q.tables));
+    if (q.exam_basis || (q.pre_amend || []).length) item.append(el("div", { className: "basis-row" }, ...basisBadges(q)));
     for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) item.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
     const buttons = q.choices.map((text, i) => {
       const b = choiceButton(i, text);

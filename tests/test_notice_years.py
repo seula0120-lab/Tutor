@@ -21,9 +21,12 @@ def test_year_shown_only_when_exam_date_has_one(tmp_path):
     assert tax_notice("재무회계", 128, tmp_path) is None and tax_notice("원가회계", 128, tmp_path) is None
 
 
-def test_real_bank_has_no_dates_so_no_year_is_invented():
-    assert exam_years() == {}
-    assert tax_notice("세무회계", 128) == "128회 · 세법 개정 확인 필요"
+def test_real_bank_years_come_only_from_exam_dates_file():
+    from tutor import exam_dates
+    found = exam_dates.read()
+    assert exam_years() == {n: int(e["exam_date"][:4]) for n, e in found.items()}     # 파일에 있는 회차만, 추정 없음
+    assert tax_notice("세무회계", 128) == "128회(2026년 시행) · 세법 개정 확인 필요"
+    assert tax_notice("세무회계", 99) == "99회 · 세법 개정 확인 필요"                    # 시행일을 모르는 회차는 회차만
 
 
 def test_cache_follows_file_changes(tmp_path):

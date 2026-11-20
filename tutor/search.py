@@ -10,7 +10,7 @@ import math
 import re
 
 from .glossary import expand_everyday_words, load_glossary
-from .notice import tax_notice
+from .notice import exam_basis, tax_notice
 
 LATEST_ROUNDS = 10       # 선택 범위 "최신 10회분"의 회차 수
 DEFAULT_ROUNDS = None    # 기본 검색 범위: 전체 회차(None). 숫자를 주면 최신 N회분
@@ -130,7 +130,7 @@ def search_theory(query, conn, round_limit=DEFAULT_ROUNDS, entries=None, limit=R
             "id": row["id"], "round": row["round"], "number": row["number"], "subject": row["subject"],
             "tax": row["tax"], "unit": row["unit"], "question": row["question"],
             "matched": matched, "score": round(score, 2),
-            "tax_notice": tax_notice(row["subject"], row["round"])})
+            "tax_notice": tax_notice(row["subject"], row["round"]), "exam_basis": exam_basis(row["subject"], row["round"])})
     if not out["results"]:
         out["note"] = f"{scope}에서 관련 이론 기출을 찾지 못했습니다."
     return out

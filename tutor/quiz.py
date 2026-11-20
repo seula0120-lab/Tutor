@@ -7,7 +7,8 @@
 import json
 import random
 
-from .notice import tax_notes, tax_notice
+from . import amend, tables
+from .notice import exam_basis, exam_day, tax_notes, tax_notice
 
 NO_EXPLANATION = "공식 해설 없음"
 
@@ -29,6 +30,9 @@ def public_question(row):
         "tax": row["tax"], "unit": row["unit"], "points": row["points"], "question": row["question"],
         "choices": json.loads(row["choices"]), "multi": len(accepted_answers(row["answer"])) > 1,
         "tax_notice": tax_notice(row["subject"], row["round"]),
+        "exam_basis": exam_basis(row["subject"], row["round"]),
+        "pre_amend": amend.badges(row["unit"], row["question"] + " " + " ".join(json.loads(row["choices"])), exam_day(row["round"])) if row["subject"] == "세무회계" else [],
+        "tables": tables.for_question(row["id"]),
         "tax_notes": tax_notes(row["subject"], row["round"], row["question"] + " " + " ".join(json.loads(row["choices"])), row["tax"]),
     }
 

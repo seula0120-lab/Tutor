@@ -6,6 +6,7 @@
 import json
 from pathlib import Path
 
+from . import exam_dates
 from .corrections import CORRECTIONS_PATH, apply_corrections, load_corrections
 from .tagging import tag_question
 
@@ -43,12 +44,13 @@ def search_content(row):
     return " ".join([row["question"], *json.loads(row["choices"]), row["explanation"]])
 
 
-def load_bank(conn, rounds):
-    """rounds 로 DB 를 통째로 다시 채우고 적재한 문항 수를 돌려준다."""
+def load_bank(conn, rounds, exam_dates_path=exam_dates.PATH):
+    """rounds 로 DB 를 통째로 다시 채우고 적재한 문항 수를 돌려준다. 회차별 시행일(exam_dates 표)도 함께 다시 채운다."""
     rows = [question_row(round_no, item) for round_no, items in rounds for item in items]
     with conn:  # 하나의 트랜잭션
         conn.execute("DELETE FROM theory_fts")
         conn.execute("DELETE FROM questions")
+        exam_dates.fill(conn, {round_no for round_no, _ in rounds}, exam_dates_path)
         if not rows:  # 적재할 문항이 없으면 비운 채로 끝낸다
             return 0
         columns = list(rows[0])

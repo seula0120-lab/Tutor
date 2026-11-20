@@ -46,6 +46,11 @@ python3 -m venv .venv
    - 새·바뀐 원본만 `data/bank/<회차>.json` 으로 변환하고 DB 를 다시 채웁니다. 정답표 대조에 걸린 회차는 적재하지 않고 이유를 출력합니다.
 3. 원문 오류는 `data/bank` 를 직접 고치지 않고 `data/corrections.json` 에 (문항, 칸, 전, 후, 근거)로 적습니다. 적재할 때마다 자동 적용됩니다.
 
+### 시행일·수치·표 (세무 문장 읽는 법)
+- 세무 문장에는 '○○○○년 ○월 시행 시험 기준'이 붙고(`data/exam_dates.json`, 원본 표지에서 뽑음), 시험이 개정세법 적용일 앞이면 '개정 전 기준' 배지가 같이 보인다.
+- 노트의 수치 옆 작은 글씨는 적용 대상·기준일이다(`numbers` 칸, 구조화는 `scripts/structure_numbers.py`).
+- 문제 글 속 표는 HTML 표로 보인다(`data/tables.json`, 추출은 `scripts/extract_tables.py`, 점검은 `docs/table_audit.md`).
+
 ## 검증
 
 ```bash

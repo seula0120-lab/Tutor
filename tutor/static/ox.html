@@ -23,6 +23,8 @@ function oxCard(item, container, onDone) {
   container.classList.add("paper", "ox-card");
   container.append(el("div", { className: "meta", textContent: pathText(item) }),
     ...(item.stem ? [el("div", { className: "small ox-stem", textContent: "문제: " + item.stem })] : []),
+    ...renderTables(item.tables),
+    ...(item.exam_basis || (item.pre_amend || []).length ? [el("div", { className: "basis-row" }, ...basisBadges(item))] : []),
     ...(item.old_tax ? [el("div", {}, el("span", { className: "taxflag", textContent: item.tax_label || "세법 개정 확인 필요" }))] : []),
     el("div", { className: "stem ox-text", textContent: item.text }));
   const result = el("div", { className: "ox-result" });

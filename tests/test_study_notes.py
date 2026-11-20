@@ -71,7 +71,7 @@ def test_note_shape_and_limits(db):
         assert 3 <= len(terms) <= 6 and set(terms) <= glossary, (unit, [t for t in terms if t not in glossary])
         assert 2 <= len(note["practice"]) <= 3, unit
         if subject == "세무회계":
-            assert all(set(c) == {"what", "how", "when", "page", "quote"} and isinstance(c["page"], int) and 1 <= c["page"] <= 184 for c in note["changes"]), unit
+            assert all(set(c) == {"what", "how", "when", "page", "quote", "keywords"} and isinstance(c["page"], int) and 1 <= c["page"] <= 184 for c in note["changes"]), unit
             assert note["tax"] == next(t for s2, t, u in study.unit_rows(db) if u == unit), f"{unit}: 세목 폴더 값이 DB와 다름"
         else:
             assert note["changes"] == [], "재무회계·원가회계는 '2022년 이후 바뀐 것' 칸을 비워 둔다"

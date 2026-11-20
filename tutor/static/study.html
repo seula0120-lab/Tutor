@@ -100,9 +100,9 @@ function draftControls(box, unit, key, isDraft) {
 }
 
 // ⑥ 칸 내용: 무엇이 → 어떻게 · 적용 시기 · 쪽수, 사용자가 tax_changes.json 에 적은 메모, 자료 없는 해 안내.
-function changeList(items, memos, gap) {
+function changeList(items, memos, gap, numbers = []) {
   const box = el("div", { className: "change-list" });
-  if (items.length) box.append(el("ul", {}, ...items.map((c) => el("li", { className: "change-item" }, el("b", { textContent: c.what }), ` → ${c.how} · 적용 ${c.when} `,
+  if (items.length) box.append(el("ul", {}, ...items.map((c) => el("li", { className: "change-item" }, el("b", {}, ...numberedNodes(c.what, numbers.filter((n) => n.where === `changes[${items.indexOf(c)}].what`))), " → ", ...numberedNodes(c.how, numbers.filter((n) => n.where === `changes[${items.indexOf(c)}].how`)), ` · 적용 ${c.when} `,
     el("span", { className: "src-badge pdf-badge", textContent: `2025 개정세법 p.${c.page}` })))));
   else box.append(empty("이 단원에 연결한 2025 개정세법 항목이 없습니다."));
   if (memos.length) box.append(el("h3", { textContent: "내가 적은 세법 개정 메모" }), el("ul", {}, ...memos.map((m) => el("li", { className: "change-memo", textContent: `${m.year ? m.year + "년 " : ""}${m.keyword}: ${m.memo}` }))));
@@ -131,7 +131,7 @@ async function showUnit(unit) {
   const concept = section("concept", "②", "개념 정리");
   if (note) {
     const meaning = el("div", { className: "meaning-box", id: "termMeaning", hidden: true });
-    concept.append(el("ul", { className: "concept-list" }, ...note.concept.lines.map((l) => el("li", { textContent: l.text }, ...(l.sources.length ? [" ", ...l.sources.map((s) => el("span", { className: "src-badge", textContent: s }))] : []),
+    concept.append(el("ul", { className: "concept-list" }, ...note.concept.lines.map((l, i) => el("li", {}, ...numberedNodes(l.text, (note.numbers || []).filter((n) => n.where === `concept.lines[${i}]`)), " ", ...basisBadges(l), ...(l.sources.length ? [" ", ...l.sources.map((s) => el("span", { className: "src-badge", textContent: s }))] : []),
       ...(l.pdf ? [" ", el("span", { className: "src-badge pdf-badge", textContent: `2025 개정세법 p.${l.pdf.page}` })] : []),
       ...(l.diff ? [" ", el("span", { className: "diff-badge", textContent: l.diff })] : []),
       ...(l.check ? [" ", el("span", { className: "check-badge", textContent: l.check })] : [])))),
@@ -154,7 +154,7 @@ async function showUnit(unit) {
   const sentences = section("sentences", "④", "시험에 나온 문장", el("div", { className: "small", textContent: "이 단원 기출에서 뽑은 문장입니다(최근 회차 우선, 같은 문장은 합침). 문항 유형은 자동 판별이라 틀릴 수 있습니다." }));
   const sentenceList = (items, cls, title) => el("div", { className: cls }, el("h3", { textContent: title }),
     items.length ? el("ul", {}, ...items.map((s) => el("li", {}, s.text, " ", ...s.sources.slice(0, 3).map((id) => el("span", { className: "src-badge", textContent: id })),
-      el("span", { className: "small", textContent: ` 최근 ${s.latest_round}회${s.count > 1 ? ` · ${s.count}회 출제` : ""}` }), ...(s.tax_notice ? [" ", el("span", { className: "taxflag", textContent: s.tax_notice })] : []))))
+      el("span", { className: "small", textContent: ` 최근 ${s.latest_round}회${s.count > 1 ? ` · ${s.count}회 출제` : ""}` }), ...(s.tax_notice ? [" ", el("span", { className: "taxflag", textContent: s.tax_notice })] : []), " ", ...basisBadges(s))))
       : empty("이 단원에서 문장으로 쓸 수 있는 기출이 없습니다."));
   sentences.append(el("div", { className: "sentence-cols" }, sentenceList(data.sentences.right, "okc", "맞는 문장"), sentenceList(data.sentences.traps, "trap", "함정(틀린 문장으로 출제)")),
     el("div", { className: "small", textContent: `문장으로 쓰지 않은 문항(계산·조합·식별형 등) ${data.sentences.excluded_count}개는 아래 5문제 풀기나 기출 답안 탭에서 풉니다.` }));
@@ -173,7 +173,7 @@ async function showUnit(unit) {
 
   // ⑥ 2022년 이후 바뀐 것(세무 단원용)
   const changes = section("changes", "⑥", "2022년 이후 바뀐 것");
-  if (note && data.subject === "세무회계") changes.append(changeList(note.changes, note.change_memos, note.change_gap), el("a", { className: "small", id: "allChangesLink", href: "/study-changes", textContent: "4년 사이 바뀐 세법 모아 보기 →" }));
+  if (note && data.subject === "세무회계") changes.append(changeList(note.changes, note.change_memos, note.change_gap, note.numbers), el("a", { className: "small", id: "allChangesLink", href: "/study-changes", textContent: "4년 사이 바뀐 세법 모아 보기 →" }));
   else changes.append(empty("세무 단원용 칸이라 재무회계·원가회계는 비워 둡니다."));
   view.append(changes);
 

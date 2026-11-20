@@ -12,7 +12,8 @@ from .analysis import unit_profile
 from .glossary import load_glossary
 from .quiz import public_question
 from .records import notebook
-from .notice import tax_changes
+from . import amend
+from .notice import exam_basis, exam_day, tax_changes
 from .search import LATEST_ROUNDS
 from .summary import collect_sentences, merge_sentences
 
@@ -97,7 +98,8 @@ def unit_sentences(conn, subject, tax, unit):
     def pick(entries):
         groups = merge_sentences([e for e in entries if is_full_sentence(e[0])])
         groups.sort(key=lambda g: (-max(g["rounds"]), -g["count"]))
-        return [{"text": g["text"], "sources": g["sources"], "count": g["count"], "latest_round": max(g["rounds"]), "tax_notice": g["tax_notice"]}
+        return [{"text": g["text"], "sources": g["sources"], "count": g["count"], "latest_round": max(g["rounds"]), "tax_notice": g["tax_notice"],
+                 "exam_basis": g["exam_basis"], "pre_amend": amend.badges(unit, g["text"], g["exam_day"]) if g["exam_basis"] else []}
                 for g in groups[:SENTENCE_LIMIT]]
     return {"right": pick(right), "traps": pick(traps), "excluded_count": len(excluded)}
 
@@ -109,6 +111,17 @@ def reviewed_sections(conn, unit):
 def get_status(conn, unit):
     row = conn.execute("SELECT status FROM study_progress WHERE user_id = ? AND unit = ?", (conn.user_id, unit)).fetchone()
     return row["status"] if row else ""
+
+
+def _line_with_basis(line, unit):
+    """세무 노트 줄에 시험 기준(출처 중 가장 최근 회차의 시행일)과 '개정 전 기준' 배지를 붙인다. 개념 줄이 아닌 과목이거나 출처 시행일을 모르면 붙이지 않는다."""
+    rounds = [int(s.split("-")[0]) for s in line.get("sources", [])]
+    if not rounds:
+        return line
+    latest = max(rounds)
+    basis = exam_basis(TAX_SUBJECT, latest)
+    day = exam_day(latest)
+    return {**line, "exam_basis": basis or "", "pre_amend": amend.badges(unit, line["text"], day)}
 
 
 def get_note(conn, unit):
@@ -126,8 +139,9 @@ def get_note(conn, unit):
             row = conn.execute("SELECT * FROM questions WHERE id = ?", (formula["example_id"],)).fetchone()
             formula = {**formula, "example": public_question(row) if row else None}
         concept = note.get("concept") or {}
-        out["note"] = {"concept": {"lines": concept.get("lines", []),
+        out["note"] = {"concept": {"lines": [_line_with_basis(line, name) if subject == TAX_SUBJECT else line for line in concept.get("lines", [])],
                                    "terms": [{"term": t, "meaning": meanings.get(t, "")} for t in concept.get("terms", [])]},
+                       "numbers": note.get("numbers") or [],
                        "practice": note.get("practice") or [], "formula": formula, "changes": note.get("changes") or [],
                        "change_memos": change_memos(tax, name, note) if subject == TAX_SUBJECT else [],
                        "change_gap": CHANGES_GAP if subject == TAX_SUBJECT else ""}

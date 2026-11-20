@@ -6,7 +6,10 @@
 """
 import json
 import re
+from datetime import date
 from pathlib import Path
+
+from . import exam_dates
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 BANK_DIR = DATA / "bank"
@@ -33,9 +36,9 @@ def _dir_stamp(bank_dir):
 
 
 def exam_years(bank_dir=BANK_DIR):
-    """{회차: 시행 연도(int)}. exam_date 가 비었거나 연도를 읽을 수 없는 회차는 넣지 않는다."""
+    """{회차: 시행 연도(int)}. 시행일을 모르는 회차는 넣지 않는다(bank JSON 의 exam_date 와 data/exam_dates.json)."""
     bank_dir = Path(bank_dir)
-    stamp = _dir_stamp(bank_dir)
+    stamp = (_dir_stamp(bank_dir), exam_dates.PATH.stat().st_mtime_ns if exam_dates.PATH.exists() else 0)
     hit = _cache.get(("years", bank_dir))
     if hit and hit[0] == stamp:
         return hit[1]
@@ -50,8 +53,25 @@ def exam_years(bank_dir=BANK_DIR):
         match = re.search(r"(?<!\d)(19|20)\d{2}(?!\d)", str(data.get("exam_date") or ""))
         if match and isinstance(data.get("round"), int):
             years[data["round"]] = int(match.group(0))
+    if bank_dir == BANK_DIR:                                # 진짜 문제은행이면, 원본 표지에서 뽑은 시행일(data/exam_dates.json)이 우선한다
+        for round_no, entry in exam_dates.read().items():
+            years[round_no] = int(entry["exam_date"][:4])
     _cache[("years", bank_dir)] = (stamp, years)
     return years
+
+
+def exam_day(round_no, bank_dir=BANK_DIR):
+    """회차의 시행일(일 번호). 모르면 None. 진짜 문제은행(data/exam_dates.json)일 때만 알 수 있다."""
+    if Path(bank_dir) != BANK_DIR:
+        return None
+    entry = _cached(exam_dates.PATH, lambda p: exam_dates.read() if p else {}).get(round_no)
+    return date.fromisoformat(entry["exam_date"]).toordinal() if entry else None
+
+
+def exam_basis(subject, round_no, bank_dir=BANK_DIR):
+    """세무회계면 '2026년 10월 시행 시험 기준'. 시행일을 모르거나 세무가 아니면 None."""
+    day = exam_day(round_no, bank_dir) if subject == TAX_SUBJECT else None
+    return exam_dates.label(day) if day is not None else None
 
 
 def tax_changes(path=TAX_CHANGES):

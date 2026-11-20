@@ -78,5 +78,27 @@
     ],
     "example_id": "66-13"
   },
-  "changes": []
+  "changes": [],
+  "numbers": [
+    {
+      "where": "concept.lines[0]",
+      "token": "6개월",
+      "value": "6",
+      "unit": "개월",
+      "applies_to": "계약금을 받기로 한 날의 다음 날부터 용역 제공이 완료되는 날까지 6개월",
+      "as_of": "120회(2025년 6월 시행 시험) 기준",
+      "exception": "",
+      "source": "기출 120-11"
+    },
+    {
+      "where": "concept.lines[0]",
+      "token": "2회",
+      "value": "2",
+      "unit": "회",
+      "applies_to": "계약금과 잔금 2회",
+      "as_of": "120회(2025년 6월 시행 시험) 기준",
+      "exception": "",
+      "source": "기출 120-11"
+    }
+  ]
 }

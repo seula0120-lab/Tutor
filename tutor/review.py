@@ -45,7 +45,8 @@ def _describe(conn, target, state, items):
         if item is None:
             return None
         return {**base, "kind": "ox", "key": item["key"], "text": item["text"], "stem": item["stem"], "subject": item["subject"], "tax": item["tax"],
-                "unit": item["unit"], "old_tax": item["old_tax"], "tax_label": item["tax_label"]}
+                "unit": item["unit"], "old_tax": item["old_tax"], "tax_label": item["tax_label"],
+                "exam_basis": item["exam_basis"], "pre_amend": item["pre_amend"]}
     row = get_row(conn, target)
     if row is None:
         return None

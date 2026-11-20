@@ -82,6 +82,24 @@ __THEME__
             slot.appendChild(el("div", q.id + " (" + q.round + "회 " + q.number + "번) · " + q.points + "점", "small"));
             if (q.tax_notice) slot.appendChild(el("span", q.tax_notice, "taxflag"));
             slot.appendChild(el("div", q.question)).style.fontWeight = "600";
+            (q.tables || []).forEach(function (t) {                                // 문제 글 속 표(머리글·칸 병합 유지)
+              var wrap = el("div", null, "qtable-wrap"), table = el("table", null, "qtable"), head = el("thead"), body = el("tbody");
+              for (var r = 0; r < t.n_rows; r++) {
+                var tr = el("tr");
+                t.cells.filter(function (c) { return c.r === r; }).forEach(function (c) {
+                  var isHead = r < t.header_rows || (t.row_header && c.c === 0);
+                  var cell = el(isHead ? "th" : "td", c.text);
+                  if (c.rs > 1) cell.rowSpan = c.rs;
+                  if (c.cs > 1) cell.colSpan = c.cs;
+                  tr.appendChild(cell);
+                });
+                (r < t.header_rows ? head : body).appendChild(tr);
+              }
+              if (head.childElementCount) table.appendChild(head);
+              table.appendChild(body); wrap.appendChild(table); slot.appendChild(wrap);
+            });
+            if (q.exam_basis) slot.appendChild(el("span", q.exam_basis, "basis"));
+            (q.pre_amend || []).forEach(function (b) { slot.appendChild(el("span", b.text, "preamend")); });
             var accepted = q.answer.split(",").map(function (a) { return a.trim(); });
             if (accepted.length > 1) slot.appendChild(el("div", "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다.", "small"));
             var result = el("div");

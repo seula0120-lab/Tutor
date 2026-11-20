@@ -37,6 +37,7 @@ const DESIGN_SHOTS = join(SHOTS, "design");
 const STUDY_SHOTS = join(SHOTS, "study");
 const OX_SHOTS = join(SHOTS, "ox");
 const CAL_SHOTS = join(SHOTS, "calendar");
+const NUM_SHOTS = join(SHOTS, "numbers");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
 mkdirSync(SHOTS, { recursive: true });
@@ -44,6 +45,7 @@ mkdirSync(DESIGN_SHOTS, { recursive: true });
 mkdirSync(STUDY_SHOTS, { recursive: true });
 mkdirSync(OX_SHOTS, { recursive: true });
 mkdirSync(CAL_SHOTS, { recursive: true });
+mkdirSync(NUM_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
@@ -846,6 +848,77 @@ async function main() {
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
     assert(!problems.length, problems.slice(0, 6).join(" | ") + (problems.length > 6 ? ` … 외 ${problems.length - 6}건` : ""));
+  });
+
+  // ---- 강사님 피드백 ②: 표가 표로 보이고, 세무 문장에 시행일 기준·수치 대상/기준일·개정 전 배지가 보인다.
+  await scenario("표가 있는 문항이 표로 보임(머리글·칸 병합 유지, 문제 화면·O/X 데이터)", async () => {
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/");
+    await page.waitFor(`typeof loadQuestion === 'function'`, "문제 화면");
+    await page.evaluate(`showTab('answers'); loadQuestion(123, 8); true`);
+    await page.waitFor(`document.querySelector('.paper .qtable')`, "문제 카드 안의 표");
+    const shape = await page.evaluate(`(() => {
+      const t = document.querySelector('.paper .qtable');
+      const th = [...t.querySelectorAll('thead th')].map((c) => ({ text: c.textContent, col: c.colSpan, row: c.rowSpan, scope: c.getAttribute('scope') }));
+      const rowHead = [...t.querySelectorAll('tbody th')].map((c) => c.textContent);
+      return { rows: t.rows.length, th, rowHead, cell: t.querySelector('tbody tr:last-child td:last-child').textContent, tag: document.querySelector('.paper .stem').nextElementSibling.className };
+    })()`);
+    assert(shape.rows === 4 && shape.th.some((c) => c.text === "보조부문" && c.col === 2) && shape.th.some((c) => c.text === "배분대상원가" && c.row === 2), "병합된 머리글이 그대로 보여야 함: " + JSON.stringify(shape.th));
+    assert(shape.th.every((c) => c.scope === "col") && shape.rowHead.includes("수선부문") && shape.rowHead.includes("전력부문"), "열·행 머리글 연결(scope)");
+    assert(shape.cell === "100,000원" && shape.tag === "qtable-wrap", "표 칸 값/위치: " + JSON.stringify(shape));
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "표가 화면을 넘치지 않음");
+    await sleep(200);
+    await page.shotTo("표-문항-light", NUM_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    await sleep(250);
+    await page.shotTo("표-문항-dark", NUM_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/");
+    await page.waitFor(`typeof loadQuestion === 'function'`, "문제 화면(모바일)");
+    await page.evaluate(`showTab('answers'); loadQuestion(123, 8); true`);
+    await page.waitFor(`document.querySelector('.paper .qtable')`, "모바일 표");
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일에서 표 때문에 화면이 가로로 밀리지 않음(표 칸 안에서 스크롤)");
+    await sleep(200);
+    await page.shotTo("표-문항-mobile", NUM_SHOTS);
+    await page.viewport(1100, 900, false);
+  });
+
+  await scenario("세무 문장에 시행일·개정 전 배지: 시험 기준 문구, 수치 옆 대상·기준일, 개정 전 기준 배지", async () => {
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/study/" + encodeURIComponent("근로소득·연말정산"));
+    await page.waitFor(`document.querySelector('.concept-list li')`, "노트");
+    const note = await page.evaluate(`({
+      basis: [...document.querySelectorAll('.concept-list .basis')].map((e) => e.textContent),
+      pre: [...document.querySelectorAll('.concept-list .preamend')].map((e) => e.textContent),
+      preNote: [...document.querySelectorAll('.concept-list .preamend-note')].map((e) => e.textContent),
+      nums: document.querySelectorAll('.concept-list .num-tag .numnote').length,
+      numText: (document.querySelector('.concept-list .num-tag') || {}).textContent || '',
+      numTitle: (document.querySelector('.concept-list .num-tag') || {}).title || '',
+    })`);
+    assert(note.basis.length >= 3 && note.basis.every((t) => /^\d{4}년 \d{1,2}월 시행 시험 기준$/.test(t)), "시험 기준 문구 'YYYY년 M월 시행 시험 기준': " + JSON.stringify(note.basis));
+    assert(note.pre.length >= 1 && note.pre.every((t) => t === "개정 전 기준") && note.preNote.every((t) => /’26\.\d+\.\d+/.test(t) && /p\d+/.test(t)), "개정 전 기준 배지에 적용일·쪽 표시: " + JSON.stringify(note.preNote));
+    assert(note.nums >= 1 && /\(.+ · .+\)/.test(note.numText) && /값 .+ · 단위 .+ · 적용 대상 .+ · 기준일 .+ · 출처 /.test(note.numTitle), "수치 옆 작은 글씨(대상·기준일)와 툴팁: " + note.numText + " / " + note.numTitle);
+    const changes = await page.evaluate(`[...document.querySelectorAll('#sec-changes .num-tag, .change-list .num-tag')].map((e) => e.textContent)`);
+    assert(changes.length >= 3 && changes.every((t) => t.includes("’26") || t.includes("26.1.1")), "개정 항목 수치 옆에 적용 시기(’26.1.1.): " + JSON.stringify(changes.slice(0, 2)));
+    await sleep(200);
+    await page.shotTo("세무문장-배지-light", NUM_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    await sleep(250);
+    await page.shotTo("세무문장-배지-dark", NUM_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/study/" + encodeURIComponent("근로소득·연말정산"));
+    await page.waitFor(`document.querySelector('.concept-list .num-tag')`, "모바일 노트");
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤 없음");
+    await sleep(200);
+    await page.shotTo("세무문장-배지-mobile", NUM_SHOTS);
+    await page.viewport(1100, 900, false);
+    // 문제 화면(세무 문항)과 O/X: 같은 문구가 보인다
+    const q = await page.evaluate(`api('/api/question?round=127&number=12').then((r) => r.data)`);
+    assert(q.subject === "세무회계" && q.exam_basis === "2026년 8월 시행 시험 기준", "세무 문항에 시험 기준 문구: " + JSON.stringify([q.subject, q.exam_basis]));
   });
 
   await scenario("콘솔 오류가 없다", async () => {

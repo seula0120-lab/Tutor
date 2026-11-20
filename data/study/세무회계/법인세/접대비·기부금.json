@@ -78,14 +78,181 @@
       "how": "20% → 30%(법인법 §24③)",
       "when": "’26.1.1. 이후 개시하는 사업연도분부터",
       "page": 26,
-      "quote": "일반기부금 손금산입한도 비율을 20% → 30%로 상향"
+      "quote": "일반기부금 손금산입한도 비율을 20% → 30%로 상향",
+      "keywords": [
+        "사회적기업"
+      ]
     },
     {
       "what": "지역사랑상품권 기업업무추진비 추가 손금한도",
       "how": "전통시장 지출과 함께 추가 손금산입한도 적용, 일반한도의 10% → 20%(조특법 §136)",
       "when": "’26.1.1. 이후 신고하는 분부터",
       "page": 28,
-      "quote": "일반한도의 10% → 20%"
+      "quote": "일반한도의 10% → 20%",
+      "keywords": [
+        "지역사랑상품권",
+        "전통시장"
+      ]
+    }
+  ],
+  "numbers": [
+    {
+      "where": "concept.lines[5]",
+      "token": "1,200만원",
+      "value": "1,200만",
+      "unit": "원",
+      "applies_to": "…는 기본한도에 수입금액별 한도를 더해 계산한다. 기본한도는 1,200만원",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "3,600만원",
+      "value": "3,600만",
+      "unit": "원",
+      "applies_to": "중소기업 3,600만원",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "100억원",
+      "value": "100억",
+      "unit": "원",
+      "applies_to": "수입금액별 비율은 100억원",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "0.3%",
+      "value": "0.3",
+      "unit": "%",
+      "applies_to": "수입금액별 비율은 100억원 이하 0.3%",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "100억원",
+      "value": "100억",
+      "unit": "원",
+      "applies_to": "100억원",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "500억원",
+      "value": "500억",
+      "unit": "원",
+      "applies_to": "100억원~500억원",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "0.2%",
+      "value": "0.2",
+      "unit": "%",
+      "applies_to": "100억원~500억원 0.2%",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "500억원",
+      "value": "500억",
+      "unit": "원",
+      "applies_to": "500억원",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "0.03%",
+      "value": "0.03",
+      "unit": "%",
+      "applies_to": "500억원 초과 0.03%",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "concept.lines[5]",
+      "token": "20%",
+      "value": "20",
+      "unit": "%",
+      "applies_to": "문화비 지출분은 일반한도의 20%",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28
+    },
+    {
+      "where": "changes[0].how",
+      "token": "20%",
+      "value": "20",
+      "unit": "%",
+      "applies_to": "20%",
+      "as_of": "’26.1.1. 이후 개시하는 사업연도분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p26",
+      "page": 26,
+      "change": "사회적기업 일반기부금 손금산입한도"
+    },
+    {
+      "where": "changes[0].how",
+      "token": "30%",
+      "value": "30",
+      "unit": "%",
+      "applies_to": "30%",
+      "as_of": "’26.1.1. 이후 개시하는 사업연도분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p26",
+      "page": 26,
+      "change": "사회적기업 일반기부금 손금산입한도"
+    },
+    {
+      "where": "changes[1].how",
+      "token": "10%",
+      "value": "10",
+      "unit": "%",
+      "applies_to": "일반한도의 10%",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28,
+      "change": "지역사랑상품권 기업업무추진비 추가 손금한도"
+    },
+    {
+      "where": "changes[1].how",
+      "token": "20%",
+      "value": "20",
+      "unit": "%",
+      "applies_to": "20%",
+      "as_of": "’26.1.1. 이후 신고하는 분부터",
+      "exception": "",
+      "source": "2025 핵심 개정세법 p28",
+      "page": 28,
+      "change": "지역사랑상품권 기업업무추진비 추가 손금한도"
     }
   ]
 }

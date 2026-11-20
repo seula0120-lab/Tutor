@@ -130,6 +130,17 @@ td.num { text-align: right; white-space: nowrap; }
 .explain { background: var(--accent-soft); border-radius: var(--s2); padding: var(--s3); margin-top: var(--s2); white-space: pre-wrap; }
 .taxflag { display: inline-block; font-size: 12px; font-weight: 700; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 999px; padding: 0 var(--s2); margin: var(--s1) 0; }
 .taxflag::before { content: "개정 "; }
+.basis { display: inline-block; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0 var(--s2); margin: var(--s1) var(--s1) var(--s1) 0; }
+.preamend { display: inline-block; font-size: 12px; font-weight: 700; color: var(--bad); background: var(--bad-soft); border: 1px solid var(--bad); border-radius: 999px; padding: 0 var(--s2); margin: var(--s1) var(--s1) var(--s1) 0; }
+.preamend-note { color: var(--muted); }
+.basis-row { margin: var(--s1) 0; }
+.num-tag b { font-variant-numeric: tabular-nums; }
+.numnote { color: var(--muted); font-size: 11px; font-weight: 400; }
+.qtable-wrap { overflow-x: auto; margin: var(--s2) 0; }
+.qtable { border-collapse: collapse; font-size: 14px; background: var(--surface); }
+.qtable th, .qtable td { border: 1px solid var(--line); padding: var(--s1) var(--s2); vertical-align: top; }
+.qtable th { background: var(--accent-soft); font-weight: 700; text-align: center; }
+.qtable td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---- 단어 주석·AI ---- */
 .term { border-bottom: 2px solid var(--warn); cursor: pointer; }

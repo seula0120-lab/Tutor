@@ -12,7 +12,8 @@ import re
 from collections import Counter
 from difflib import SequenceMatcher
 
-from .notice import TAX_SUBJECT, tax_notice
+from . import amend
+from .notice import TAX_SUBJECT, exam_basis, exam_day, tax_notice
 from .question_type import CALCULATION, COMBINATION, IDENTIFY, NEGATIVE, POSITIVE, UNKNOWN, classify
 from .quiz import accepted_answers
 
@@ -104,6 +105,8 @@ def merge_sentences(entries):
         g["count"] = len(g["sources"])
         latest_tax_round = max(g["rounds"]) if g["tax"] else None
         g["tax_notice"] = tax_notice(TAX_SUBJECT, latest_tax_round) if g["tax"] else None
+        g["exam_basis"] = exam_basis(TAX_SUBJECT, latest_tax_round) if g["tax"] else None
+        g["exam_day"] = exam_day(latest_tax_round) if g["tax"] else None
         del g["tax"]
     groups.sort(key=lambda g: (-g["count"], -max(g["rounds"])))
     return groups
@@ -173,6 +176,13 @@ def collect_sentences(rows):
     return right, traps, excluded
 
 
+def with_amend(groups, unit_of):
+    """문장 묶음마다 '개정 전 기준' 배지(pre_amend)를 붙인다. unit_of(묶음) → 그 문장의 단원."""
+    for g in groups:
+        g["pre_amend"] = amend.badges(unit_of(g), g["text"], g.get("exam_day")) if g.get("exam_basis") else []
+    return groups
+
+
 def build_summary(conn, results, terms):
     """검색 결과(점수 포함)와 질문 핵심어(terms, 동의어 확장 포함) → 요약 카드 dict.
 
@@ -182,10 +192,12 @@ def build_summary(conn, results, terms):
     right, traps, excluded = collect_sentences(rows)
     has_tax = any(r["subject"] == TAX_SUBJECT for r in rows)
     latest_tax = max((r["round"] for r in rows if r["subject"] == TAX_SUBJECT), default=None)
+    unit_by_id = {r["id"]: r["unit"] for r in rows}
+    unit_of = lambda g: unit_by_id[g["sources"][0]]
     return {
         "coverage": coverage(rows),
-        "right": select_sentences(merge_sentences(right), terms),
-        "traps": select_sentences(merge_sentences(traps), terms),
+        "right": with_amend(select_sentences(merge_sentences(right), terms), unit_of),
+        "traps": with_amend(select_sentences(merge_sentences(traps), terms), unit_of),
         "excluded": excluded,
         "related_ids": [r["id"] for r in rows],        # '이 주제 기출 풀기' 대상: 계산·조합형 포함, 검색 점수 순
         "tax_notice": tax_notice(TAX_SUBJECT, latest_tax) if has_tax else None,

@@ -53,6 +53,12 @@ CREATE TABLE IF NOT EXISTS glossary_review (
     proposed_meaning TEXT NOT NULL,     -- 고쳐 쓰자고 제안한 풀이(없으면 '')
     updated          REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS exam_dates (
+    round     INTEGER PRIMARY KEY,
+    exam_date TEXT NOT NULL,             -- 시행일 'YYYY-MM-DD' (data/exam_dates.json 에서 적재 때 채움, 못 찾은 회차는 줄이 없다)
+    source    TEXT NOT NULL,
+    page      INTEGER
+);
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     username      TEXT NOT NULL UNIQUE,   -- 로그인 아이디(소문자로 저장)

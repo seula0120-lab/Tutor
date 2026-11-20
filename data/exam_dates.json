@@ -1,0 +1,290 @@
+[
+ {
+  "round": 66,
+  "exam_date": "2016-04-10",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/66/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2016년 4월 10일 시행"
+ },
+ {
+  "round": 67,
+  "exam_date": "2016-06-12",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/67/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2016년 6월 12일 시행"
+ },
+ {
+  "round": 68,
+  "exam_date": "2016-10-09",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/68/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2016년 10월 9일 시행"
+ },
+ {
+  "round": 69,
+  "exam_date": "2016-12-04",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/69/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2016년 12월 4일 시행"
+ },
+ {
+  "round": 70,
+  "exam_date": "2017-02-18",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/70/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2017년2월18일시행"
+ },
+ {
+  "round": 71,
+  "exam_date": "2017-04-09",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/71/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2017년4월9일시행"
+ },
+ {
+  "round": 72,
+  "exam_date": "2017-06-03",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/72/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2017년6월3일시행"
+ },
+ {
+  "round": 73,
+  "exam_date": "2017-08-19",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/73/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2017년8월19일시행"
+ },
+ {
+  "round": 74,
+  "exam_date": "2017-10-15",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/74/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2017년 10월 15일 시행"
+ },
+ {
+  "round": 75,
+  "exam_date": "2017-12-02",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/75/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2017년 12월 2일 시행"
+ },
+ {
+  "round": 76,
+  "exam_date": "2018-02-03",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/76/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2018년 2월 3일 시행"
+ },
+ {
+  "round": 77,
+  "exam_date": "2018-04-07",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/77/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2018년 4월 7일 시행"
+ },
+ {
+  "round": 78,
+  "exam_date": "2018-06-02",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/78/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2018년 6월 2일 시행"
+ },
+ {
+  "round": 79,
+  "exam_date": "2018-08-04",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/79/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2018년 8월 4일 시행"
+ },
+ {
+  "round": 80,
+  "exam_date": "2018-10-06",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/80/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2018년 10월 6일 시행"
+ },
+ {
+  "round": 81,
+  "exam_date": "2018-12-01",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/81/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2018년 12월 1일 시행"
+ },
+ {
+  "round": 82,
+  "exam_date": "2019-02-16",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/82/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2019년 2월 16일 시행"
+ },
+ {
+  "round": 83,
+  "exam_date": "2019-04-06",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/83/question_A.hwp",
+  "page": null,
+  "location": "표지(HWP 는 쪽 번호가 없음)",
+  "text": "2019년 4월 6일 시행"
+ },
+ {
+  "round": 108,
+  "exam_date": "2023-06-03",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/108/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2023년 6월 3일 시행"
+ },
+ {
+  "round": 112,
+  "exam_date": "2024-02-04",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/112/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2024년 2월 4일 시행"
+ },
+ {
+  "round": 113,
+  "exam_date": "2024-04-06",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/113/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2024년 4월 6일 시행"
+ },
+ {
+  "round": 114,
+  "exam_date": "2024-06-01",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/114/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2024년 6월 1일 시행"
+ },
+ {
+  "round": 115,
+  "exam_date": "2024-08-03",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/115/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2024년 8월 3일 시행"
+ },
+ {
+  "round": 116,
+  "exam_date": "2024-10-06",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/116/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2024년 10월 6일 시행"
+ },
+ {
+  "round": 117,
+  "exam_date": "2024-12-07",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/117/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2024년 12월 7일 시행"
+ },
+ {
+  "round": 118,
+  "exam_date": "2025-02-09",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/118/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2025년 2월 9일 시행"
+ },
+ {
+  "round": 119,
+  "exam_date": "2025-04-05",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/119/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2025년 4월 5일 시행"
+ },
+ {
+  "round": 120,
+  "exam_date": "2025-06-07",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/120/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2025년 6월 7일 시행"
+ },
+ {
+  "round": 121,
+  "exam_date": "2025-08-02",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/121/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2025년 8월 2일 시행"
+ },
+ {
+  "round": 122,
+  "exam_date": "2025-09-28",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/122/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2025년 9월 28일 시행"
+ },
+ {
+  "round": 123,
+  "exam_date": "2025-12-06",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/123/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2025년 12월 6일 시행"
+ },
+ {
+  "round": 124,
+  "exam_date": "2026-01-31",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/124/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2026년 1월 31일 시행"
+ },
+ {
+  "round": 125,
+  "exam_date": "2026-04-04",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/125/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2026년 4월 4일 시행"
+ },
+ {
+  "round": 126,
+  "exam_date": "2026-06-06",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/126/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2026년 6월 6일 시행"
+ },
+ {
+  "round": 127,
+  "exam_date": "2026-08-01",
+  "source": "/Users/seul/Desktop/PJT2_결과물 회계튜터/data/raw/127/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2026년 8월 1일 시행"
+ },
+ {
+  "round": 128,
+  "exam_date": "2026-10-03",
+  "source": "data/raw/128/question_A.pdf",
+  "page": 1,
+  "location": "1쪽",
+  "text": "2026년 10월 3일 시행"
+ }
+]

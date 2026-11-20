@@ -12,7 +12,8 @@ import random
 import re
 
 from . import records
-from .notice import tax_notice
+from . import amend, exam_dates, tables
+from .notice import exam_basis, tax_notice
 from .question_type import NEGATIVE_STEM, POSITIVE_STEM, stem_of
 from .quiz import NO_EXPLANATION, explanation_of, get_row
 from .search import LATEST_ROUNDS
@@ -93,6 +94,7 @@ def pool(conn):
     rows = conn.execute("SELECT * FROM questions").fetchall()
     by_id = {r["id"]: r for r in rows}
     latest = max((r["round"] for r in rows), default=0)
+    day_by_round = exam_dates.days(conn)
     right, traps, _ = collect_sentences(rows)
 
     def groups(entries):
@@ -109,17 +111,18 @@ def pool(conn):
                 continue
             head = by_id[g["sources"][0]]                    # 출처는 최근 회차부터 들어 있다
             latest_round = max(g["rounds"])
-            old_tax = head["subject"] == TAX_SUBJECT and latest_round <= latest - LATEST_ROUNDS
+            old_tax = head["subject"] == TAX_SUBJECT and not exam_dates.is_recent(latest_round, latest, day_by_round, LATEST_ROUNDS)
             items[key] = {"key": key, "text": g["text"], "truth": truth, "sources": g["sources"], "count": g["count"],
                           "latest_round": latest_round, "subject": head["subject"], "tax": head["tax"], "unit": head["unit"],
-                          "stem": display_stem(head["question"]), "old_tax": old_tax, "tax_label": (g["tax_notice"] or OLD_TAX_LABEL) if old_tax else ""}
+                          "stem": display_stem(head["question"]), "old_tax": old_tax, "tax_label": (g["tax_notice"] or OLD_TAX_LABEL) if old_tax else "",
+                          "tables": tables.for_question(head["id"]), "exam_basis": g["exam_basis"] or "", "pre_amend": amend.badges(head["unit"], g["text"], g["exam_day"]) if g["exam_basis"] else []}
     _cache.update(signature=signature, items=items)
     return items
 
 
 def public_item(item):
     """화면에 줄 문장: 정답(truth)과 해설은 뺀다."""
-    return {k: item[k] for k in ("key", "text", "stem", "subject", "tax", "unit", "latest_round", "old_tax", "tax_label")}
+    return {k: item[k] for k in ("key", "text", "stem", "subject", "tax", "unit", "latest_round", "old_tax", "tax_label", "exam_basis", "pre_amend", "tables")}
 
 
 def stats(conn):
@@ -170,4 +173,5 @@ def answer(conn, key, choice):
                 explanation = text
                 break
     return {"key": key, "correct": correct, "truth": item["truth"], "text": item["text"], "sources": item["sources"],
-            "explanation": explanation, "old_tax": item["old_tax"], "tax_label": item["tax_label"]}
+            "explanation": explanation, "old_tax": item["old_tax"], "tax_label": item["tax_label"],
+            "exam_basis": item["exam_basis"], "pre_amend": item["pre_amend"]}

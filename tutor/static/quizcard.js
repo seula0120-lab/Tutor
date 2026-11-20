@@ -77,6 +77,57 @@ function highlight(text, words) {
   return out;
 }
 
+// 문제 글 속 표(원본의 행·열 머리글과 칸 병합을 그대로): tables = [{n_rows, header_rows, row_header, cells: [{r, c, rs, cs, text}]}]
+function renderTables(tables) {
+  return (tables || []).map((t) => {
+    const table = el("table", { className: "qtable" });
+    table.dataset.rows = t.n_rows;
+    const head = el("thead"), body = el("tbody");
+    for (let r = 0; r < t.n_rows; r++) {
+      const tr = el("tr");
+      for (const cell of t.cells.filter((x) => x.r === r)) {
+        const isHead = r < t.header_rows || (t.row_header && cell.c === 0);
+        const td = el(isHead ? "th" : "td", { textContent: cell.text });
+        if (isHead) td.setAttribute("scope", r < t.header_rows ? "col" : "row");
+        if (cell.rs > 1) td.rowSpan = cell.rs;
+        if (cell.cs > 1) td.colSpan = cell.cs;
+        if (!isHead && /^[\d,.\-+% ]+(원|%)?$/.test(cell.text)) td.className = "num";
+        tr.append(td);
+      }
+      (r < t.header_rows ? head : body).append(tr);
+    }
+    if (head.children.length) table.append(head);
+    table.append(body);
+    return el("div", { className: "qtable-wrap" }, table);
+  });
+}
+
+// 구조화한 수치(numbers.py): 문장 속 수치마다 옆에 작은 글씨로 적용 대상·기준일을 붙인다. 마우스를 올리면 단위·예외 조건·출처까지 보인다.
+function numberedNodes(text, items) {
+  const nodes = [];
+  let pos = 0;
+  for (const n of items || []) {
+    const i = text.indexOf(n.token, pos);
+    if (i < 0) continue;
+    if (i > pos) nodes.push(document.createTextNode(text.slice(pos, i)));
+    const tag = el("span", { className: "num-tag" }, el("b", { textContent: n.token }),
+      el("small", { className: "numnote", textContent: ` (${n.applies_to.length > 18 ? "…" + n.applies_to.slice(-18) : n.applies_to} · ${n.as_of})` }));
+    tag.title = `값 ${n.value} · 단위 ${n.unit} · 적용 대상 ${n.applies_to} · 기준일 ${n.as_of}${n.exception ? " · 예외 " + n.exception : ""} · 출처 ${n.source}`;
+    nodes.push(tag);
+    pos = i + n.token.length;
+  }
+  if (pos < text.length) nodes.push(document.createTextNode(text.slice(pos)));
+  return nodes;
+}
+
+// 세무 문장 옆 작은 배지: '2026년 10월 시행 시험 기준' + 개정 전 기준(항목마다). obj = {exam_basis, pre_amend: [{label, text}]}
+function basisBadges(obj) {
+  const out = [];
+  if (obj.exam_basis) out.push(el("span", { className: "basis", textContent: obj.exam_basis }));
+  for (const b of obj.pre_amend || []) out.push(el("span", { className: "preamend", textContent: b.label, title: b.text }), el("span", { className: "small preamend-note", textContent: b.text.slice(b.label.length + 3) }));
+  return out;
+}
+
 // q: 공개용 문항(정답 없음). container: 카드를 그릴 요소. onResult({kind: "correct"|"wrong"|"seen", id}): 결과가 나왔을 때 부른다.
 function renderCard(q, container, onResult = () => {}) {
   container.replaceChildren();
@@ -84,7 +135,9 @@ function renderCard(q, container, onResult = () => {}) {
   container.classList.remove("locked");
   container.append(el("div", { className: "meta", textContent: `${q.id} (${q.round}회 ${q.number}번) · ${pathOf(q)} · ${q.points}점` }),
                    el("div", { className: "stem", textContent: q.question }));
+  container.append(...renderTables(q.tables));
   for (const note of q.tax_notes || (q.tax_notice ? [q.tax_notice] : [])) container.append(el("div", {}, el("span", { className: "taxflag", textContent: note })));
+  if (q.exam_basis || (q.pre_amend || []).length) container.append(el("div", { className: "basis-row" }, ...basisBadges(q)));
   if (q.multi) container.append(el("div", { className: "notice", textContent: "복수정답 문항입니다. 정답 중 하나를 고르면 정답으로 처리합니다." }));
   const result = el("div");
   const buttons = q.choices.map((text, i) => {
