@@ -122,7 +122,15 @@ async function main() {
   const base = `http://127.0.0.1:${port}`;
   const page = await connectPage(await startChrome());
   await page.viewport(1100, 900, false);
-  await page.goto(base + "/");
+
+  // 로그인 화면에서 아이디·비밀번호를 넣고 들어간다(화면 점검 서버가 admin 계정을 미리 만들어 둔다).
+  const logIn = async (username, password) => {
+    await page.goto(base + "/login");
+    await page.waitFor(`document.getElementById('username') && document.getElementById('loginBtn').textContent === '로그인'`, "로그인 화면");
+    await page.evaluate(`document.getElementById('username').value = ${JSON.stringify(username)}; document.getElementById('password').value = ${JSON.stringify(password)}; document.getElementById('loginBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/' && document.getElementById('userName')`, "로그인 뒤 첫 화면");
+  };
+  await logIn("admin", "admin-pass-1");
 
   await scenario("질문하면 요약 카드가 나온다", async () => {
     await page.evaluate(`document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
@@ -607,6 +615,31 @@ async function main() {
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
     assert(designFiles.length === 24, "스크린샷 24장이 아님");
+  });
+
+  await scenario("계정 만들기 → 다른 계정으로 로그인 → 오답노트가 비어 있다", async () => {
+    // 지금까지의 점검에서 admin 은 틀린 문항을 쌓았다.
+    await page.goto(base + "/#notebook");
+    assert(await page.evaluate(`(async () => (await (await fetch('/api/notebook')).json()).items.length)()`) > 0, "admin 오답노트가 비어 있음");
+    await page.goto(base + "/admin");
+    await page.waitFor(`document.querySelectorAll('#userTable tbody tr').length === 1`, "계정 표");
+    await page.evaluate(`document.getElementById('newUsername').value = 'student1'; document.getElementById('newName').value = '학생1'; document.getElementById('newPassword').value = 'student-pass-1'; document.getElementById('createBtn').click(); true`);
+    await page.waitFor(`document.querySelectorAll('#userTable tbody tr').length === 2 && document.getElementById('createMsg').textContent.includes('student1')`, "계정 만들어짐");
+    await page.screenshot("account-admin");
+    await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/login'`, "로그아웃");
+    await page.goto(base + "/study");                                       // 로그아웃 상태에서는 로그인 화면으로 돌려보낸다
+    await page.waitFor(`location.pathname === '/login'`, "로그인으로 이동");
+    await logIn("student1", "student-pass-1");
+    assert(await page.evaluate(`document.getElementById('userName').textContent === '학생1' && !document.getElementById('adminLink')`), "학생 계정 표시/관리자 링크");
+    await page.evaluate(`document.querySelector('.tab[data-tab="notebook"]').click(); true`);
+    await page.waitFor(`document.getElementById('nbList').textContent.includes('오답노트가 비어 있습니다.')`, "새 계정 오답노트 비어 있음");
+    await page.screenshot("account-student-notebook");
+    await page.goto(base + "/admin");                                       // 관리자 화면은 관리자만
+    await page.waitFor(`location.pathname === '/'`, "관리자 화면 막힘");
+    await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/login'`, "로그아웃");
+    await logIn("admin", "admin-pass-1");
   });
 
   await scenario("콘솔 오류가 없다", async () => {

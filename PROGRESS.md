@@ -140,3 +140,11 @@
 - O/X 문장은 보기 문장을 그대로 쓴 것이라 문항 물음을 읽어야 뜻이 통하는 문장이 섞일 수 있고, 유형 판별은 자동이라 O/X 가 뒤집힌 문장이 있을 수 있다(요약 카드와 같은 한계).
 - 세무 O/X 의 옛 회차 문장 배지는 최신 회차 − 10 이하 기준이다(`exam_date` 가 비어 있어 시행 연도로는 못 나눔).
 - '채권·대손' 단원은 문장이 3개뿐이라 O/X 20개를 채우지 못한다(문장이 20개 미만인 단원 11개).
+
+
+## 로그인·계정별 기록 (O/X 맥락 보완 `4950bf8` 이어서)
+- 설계: `users`(scrypt 해시+소금)·`sessions`(토큰 sha256만 저장) 표, 세션 쿠키 HttpOnly+SameSite=Lax 30일. 첫 실행은 `/api/setup`(계정이 없고 서버 컴퓨터 주소일 때만)으로 관리자 한 명, 이후는 관리자만 `/api/users`로 생성(공개 가입 없음). 로그인 연속 5번 실패 → 아이디별 5분 잠금.
+- `user_id` 가 붙은 표 7개: records, favorites, study_progress, study_review, settings, daily_plan, mock_results(기본키·UNIQUE에 user_id 포함). 공유: questions, theory_fts, glossary_review.
+- 옛 DB: connect 때 표를 다시 만들며 기존 줄은 user_id=0, 첫 관리자가 생길 때 모두 그 계정으로 이전(멱등). 옮기기 전 `data/tutor.db.before-login.bak` 백업(Git 제외).
+- 모든 화면은 로그아웃 상태에서 `/login` 으로, API 는 401. 글꼴·theme.css·quizcard.js 는 공개.
+- **사람 검토 필요**: 인터넷 공개용이 아님(HTTPS 없음, 쿠키 Secure 미설정). 비밀번호 분실 시 복구 화면 없음(관리자가 DB에서 직접 처리해야 함). 비밀번호 변경·계정 삭제 화면 없음(필요하면 다음 단계). LAN 사용은 `--host 0.0.0.0` 수동. 잠금 횟수는 서버 메모리라 재시작하면 초기화. 기존 `전산세무튜터.command`(Git 제외)는 건드리지 않음.

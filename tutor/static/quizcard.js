@@ -159,4 +159,6 @@ addEventListener("DOMContentLoaded", async () => {
   bar.append(el("div", { id: "userbox", className: "userbox" },
     el("span", { className: "small", id: "userName", textContent: data.user.name }),
     ...(data.user.is_admin ? [el("a", { id: "adminLink", className: "small", href: "/admin", textContent: "계정 관리" })] : []), logout));
+  const nav = document.querySelector(".tabs");           // 이름·버튼이 붙어 탭 줄이 좁아졌으니 현재 탭을 다시 보이는 곳으로
+  if (nav) { scrollTabIntoView(nav); dispatchEvent(new Event("resize")); }
 });
