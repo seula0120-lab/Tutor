@@ -414,13 +414,51 @@ async function main() {
     await page.waitFor(`document.querySelectorAll('#unitRun .choice').length >= 2 && document.getElementById('unitRun').textContent.includes('1 / 5')`, "5문제 풀기 열림");
   });
 
-  await scenario("공부 화면 스크린샷 15장(라이트·다크·모바일)이 scratch/screens/study/ 에 저장된다", async () => {
+  await scenario("공부: 세무회계 단원 노트 → ⑥ 바뀐 것(쪽수 출처)·개념 줄 표시 → 바뀐 세법 모아 보기", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/study");
+    await page.waitFor(`document.querySelectorAll('#subjects .subject-card').length === 3 && document.getElementById('taxChangesLink')`, "과목 카드와 모아 보기 링크");
+    const units = await page.evaluate(`[...document.querySelectorAll('.subject-card[data-subject="세무회계"] .unit-link')].map((a) => a.textContent).join()`);
+    assert(units.split(",").length === 15, "세무회계 단원이 15개가 아님: " + units);
+    assert(!(await page.evaluate(`document.querySelector('.subject-card[data-subject="세무회계"]').textContent.includes('노트 준비 중')`)), "세무 단원에 '노트 준비 중'이 남아 있음");
+    await page.evaluate(`[...document.querySelectorAll('.subject-card[data-subject="세무회계"] .unit-link')].find((a) => a.textContent === '세금계산서').click(); true`);
+    await page.waitFor(`location.pathname.startsWith('/study/') && document.getElementById('sec-changes') && document.querySelector('#sec-changes .change-item')`, "세무 노트의 ⑥ 칸");
+    const checks = await page.evaluate(`({
+      sub: document.querySelector('.sub').textContent,
+      concept: document.querySelectorAll('#sec-concept .concept-list li').length,
+      diff: document.querySelectorAll('#sec-concept .diff-badge').length,
+      check: document.querySelectorAll('#sec-concept .check-badge').length,
+      page: (document.querySelector('#sec-changes .pdf-badge') || {}).textContent,
+      gap: (document.querySelector('#sec-changes .taxflag-gap') || {}).textContent,
+      link: (document.getElementById('allChangesLink') || {}).textContent,
+    })`);
+    assert(checks.sub.includes("부가가치세"), "세목 표시: " + checks.sub);
+    assert(checks.concept >= 5 && checks.diff >= 1 && checks.check >= 1, `개념 줄/옛 기출과 다름/확인 필요 표시: ${JSON.stringify(checks)}`);
+    assert(/2025 개정세법 p\.\d+/.test(checks.page || ""), "개정세법 쪽수 표시 없음: " + checks.page);
+    assert(checks.gap === "2023·2024·2026 개정 자료 없음 — 확인 필요", "자료 없는 해 안내: " + checks.gap);
+    await page.evaluate(`document.getElementById('allChangesLink').click(); true`);
+    await page.waitFor(`location.pathname === '/study-changes' && document.querySelectorAll('.change-group').length === 3`, "모아 보기 화면의 세목 3개");
+    const all = await page.evaluate(`({
+      taxes: [...document.querySelectorAll('.change-group')].map((g) => g.dataset.tax).join(),
+      items: document.querySelectorAll('.change-item').length,
+      pages: [...document.querySelectorAll('.change-item .pdf-badge')].every((b) => /2025 개정세법 p[.]\\d+/.test(b.textContent)),
+      gap: document.querySelector('.taxflag-gap').textContent,
+      concept: !!document.querySelector('.concept-list'),
+    })`);
+    assert(all.taxes === "법인세,부가가치세,소득세", "세목 순서: " + all.taxes);
+    assert(all.items >= 25 && all.pages, `개정 항목/쪽수 출처: ${JSON.stringify(all)}`);
+    assert(all.gap.includes("확인 필요") && !all.concept, "자료 없는 해 안내 또는 ⑥ 밖 내용이 섞임");
+  });
+
+  await scenario("공부 화면 스크린샷 21장(라이트·다크·모바일)이 scratch/screens/study/ 에 저장된다", async () => {
     const files = [];
     const shots = {
       "공부-목록": async () => { await page.goto(base + "/study"); await page.waitFor(`document.querySelectorAll('#subjects .subject-card').length === 3`, "목록"); },
       "노트-개념": async () => { await page.goto(base + "/study/" + encodeURIComponent("재고자산")); await page.waitFor(`document.getElementById('sec-check')`, "노트"); },
       "노트-공식": async () => { await page.goto(base + "/study/" + encodeURIComponent("재고자산")); await page.waitFor(`document.getElementById('sec-formula') && document.querySelector('#sec-formula .choice')`, "공식"); await page.evaluate(`document.getElementById('sec-formula').scrollIntoView(); true`); },
       "원가노트-공식": async () => { await page.goto(base + "/study/" + encodeURIComponent("종합원가계산")); await page.waitFor(`document.getElementById('formulaPitfalls') && document.querySelector('#sec-formula .choice')`, "원가 공식"); await page.evaluate(`document.getElementById('sec-formula').scrollIntoView(); true`); },
+      "세무노트-바뀐것": async () => { await page.goto(base + "/study/" + encodeURIComponent("세금계산서")); await page.waitFor(`document.querySelector('#sec-changes .change-item')`, "세무 ⑥"); await page.evaluate(`document.getElementById('sec-changes').scrollIntoView(); true`); },
+      "바뀐세법-모아보기": async () => { await page.goto(base + "/study-changes"); await page.waitFor(`document.querySelectorAll('.change-group').length === 3`, "모아 보기"); },
       "노트-5문제": async () => { await page.goto(base + "/study/" + encodeURIComponent("자본")); await page.waitFor(`document.getElementById('unitQuizGo')`, "노트"); await page.evaluate(`document.getElementById('unitQuizGo').click(); true`); await page.waitFor(`document.querySelectorAll('#unitRun .choice').length >= 2`, "5문제"); await page.evaluate(`document.getElementById('sec-quiz').scrollIntoView(); true`); },
     };
     for (const [variant, scheme, width, height, mobile] of [["light", "light", 1100, 900, false], ["dark", "dark", 1100, 900, false], ["mobile", "light", 390, 844, true]]) {
@@ -435,7 +473,7 @@ async function main() {
     }
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
-    assert(files.length === 15, "스크린샷 15장이 아님");
+    assert(files.length === 21, "스크린샷 21장이 아님");
   });
 
   const designFiles = [];

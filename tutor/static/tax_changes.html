@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>4년 사이 바뀐 세법 · 전산세무 1급 이론</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main id="view"></main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("study");
+
+// 세무 노트의 '2022년 이후 바뀐 것'(⑥)만 세목별로 모은 화면. 항목마다 2025 개정세법 PDF 쪽수 출처를 단다.
+async function show() {
+  const { data } = await api("/api/study/changes");
+  const view = $("view");
+  view.replaceChildren(el("h1", { textContent: "4년 사이 바뀐 세법 모아 보기" }),
+    el("div", { className: "sub", textContent: `세무 노트의 '2022년 이후 바뀐 것'만 세목별로 모았습니다. 출처: ${data.source}. 개정 항목은 '무엇이 → 어떻게 · 적용 시기' 순서입니다.` }),
+    el("div", { className: "taxflag-gap", textContent: data.gap }), el("div", {}, el("a", { className: "small", href: "/study", textContent: "← 공부 목록으로" })));
+  for (const group of data.taxes) {
+    const box = el("section", { className: "box change-group", id: "tax-" + group.tax }, el("h2", { textContent: group.tax }));
+    box.dataset.tax = group.tax;
+    for (const u of group.units) {
+      const list = el("ul", {});
+      for (const c of u.items) list.append(el("li", { className: "change-item" }, el("b", { textContent: c.what }), ` → ${c.how} · 적용 ${c.when} `, el("span", { className: "src-badge pdf-badge", textContent: `2025 개정세법 p.${c.page}` })));
+      for (const m of u.memos) list.append(el("li", { className: "change-memo", textContent: `내 메모 · ${m.year ? m.year + "년 " : ""}${m.keyword}: ${m.memo}` }));
+      if (!list.children.length) continue;
+      box.append(el("h3", {}, el("a", { href: "/study/" + encodeURIComponent(u.unit), textContent: u.unit })), list);
+    }
+    view.append(box);
+  }
+  if (data.loose_memos.length) view.append(el("section", { className: "box", id: "looseMemos" }, el("h2", { textContent: "단원에 연결되지 않은 내 메모" }),
+    el("ul", {}, ...data.loose_memos.map((m) => el("li", { textContent: `${m.year ? m.year + "년 " : ""}${m.tax ? m.tax + " · " : ""}${m.keyword}: ${m.memo}` })))));
+}
+show();
+</script>
+</body>
+</html>

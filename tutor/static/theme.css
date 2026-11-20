@@ -223,3 +223,8 @@ h2 { font-size: 17px; margin: 0 0 var(--s2); }
 .formula-list code { white-space: normal; display: inline-block; }
 .pitfalls { background: var(--warn-soft); border-radius: var(--s2); padding: var(--s3); margin: var(--s3) 0; }
 .pitfalls h3 { margin-top: 0; }
+.pdf-badge { color: var(--ok); background: var(--ok-soft); }
+.diff-badge, .check-badge, .taxflag-gap { display: inline-block; font-size: 12px; font-weight: 700; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--warn); border-radius: 999px; padding: 0 var(--s2); }
+.taxflag-gap { margin-top: var(--s2); }
+.change-list li { margin: var(--s2) 0; }
+.change-group h2, .change-group h3 { margin-top: var(--s4); }

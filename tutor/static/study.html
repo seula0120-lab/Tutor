@@ -28,6 +28,8 @@ async function showOverview() {
   const grid = el("div", { className: "subject-grid", id: "subjects" });
   for (const card of data.cards) grid.append(subjectCard(card));
   view.append(grid);
+  view.append(el("section", { className: "box" }, el("a", { id: "taxChangesLink", className: "btn", href: "/study-changes", textContent: "4년 사이 바뀐 세법 모아 보기" }),
+    el("span", { className: "small", textContent: " 세무 노트의 '2022년 이후 바뀐 것'만 세목별로 모았습니다(쪽수 출처 포함)." })));
 }
 
 function roadmapBox(rows) {
@@ -97,6 +99,17 @@ function draftControls(box, unit, key, isDraft) {
   box.querySelector("h2").append(" ", holder);
 }
 
+// ⑥ 칸 내용: 무엇이 → 어떻게 · 적용 시기 · 쪽수, 사용자가 tax_changes.json 에 적은 메모, 자료 없는 해 안내.
+function changeList(items, memos, gap) {
+  const box = el("div", { className: "change-list" });
+  if (items.length) box.append(el("ul", {}, ...items.map((c) => el("li", { className: "change-item" }, el("b", { textContent: c.what }), ` → ${c.how} · 적용 ${c.when} `,
+    el("span", { className: "src-badge pdf-badge", textContent: `2025 개정세법 p.${c.page}` })))));
+  else box.append(empty("이 단원에 연결한 2025 개정세법 항목이 없습니다."));
+  if (memos.length) box.append(el("h3", { textContent: "내가 적은 세법 개정 메모" }), el("ul", {}, ...memos.map((m) => el("li", { className: "change-memo", textContent: `${m.year ? m.year + "년 " : ""}${m.keyword}: ${m.memo}` }))));
+  box.append(el("div", { className: "taxflag-gap", textContent: gap }));
+  return box;
+}
+
 const empty = (text) => el("div", { className: "small", textContent: text });
 
 async function showUnit(unit) {
@@ -118,7 +131,10 @@ async function showUnit(unit) {
   const concept = section("concept", "②", "개념 정리");
   if (note) {
     const meaning = el("div", { className: "meaning-box", id: "termMeaning", hidden: true });
-    concept.append(el("ul", { className: "concept-list" }, ...note.concept.lines.map((l) => el("li", { textContent: l.text }, ...(l.sources.length ? [" ", ...l.sources.map((s) => el("span", { className: "src-badge", textContent: s }))] : [])))),
+    concept.append(el("ul", { className: "concept-list" }, ...note.concept.lines.map((l) => el("li", { textContent: l.text }, ...(l.sources.length ? [" ", ...l.sources.map((s) => el("span", { className: "src-badge", textContent: s }))] : []),
+      ...(l.pdf ? [" ", el("span", { className: "src-badge pdf-badge", textContent: `2025 개정세법 p.${l.pdf.page}` })] : []),
+      ...(l.diff ? [" ", el("span", { className: "diff-badge", textContent: l.diff })] : []),
+      ...(l.check ? [" ", el("span", { className: "check-badge", textContent: l.check })] : [])))),
       el("div", { className: "term-row" }, el("b", { textContent: "핵심 용어 " }), ...note.concept.terms.map((t) => {
         const chip = el("button", { className: "ghost chip term-chip", textContent: t.term });
         chip.addEventListener("click", () => { meaning.hidden = false; meaning.replaceChildren(el("b", { textContent: t.term + " : " }), t.meaning || "단어 주석 사전에 아직 뜻이 없습니다."); });
@@ -157,8 +173,8 @@ async function showUnit(unit) {
 
   // ⑥ 2022년 이후 바뀐 것(세무 단원용)
   const changes = section("changes", "⑥", "2022년 이후 바뀐 것");
-  if (note && note.changes.length) changes.append(el("ul", {}, ...note.changes.map((c) => el("li", { textContent: typeof c === "string" ? c : c.text }))));
-  else changes.append(empty(data.subject === "세무회계" ? "아직 작성하지 않았습니다." : "세무 단원용 칸이라 재무회계·원가회계는 비워 둡니다."));
+  if (note && data.subject === "세무회계") changes.append(changeList(note.changes, note.change_memos, note.change_gap), el("a", { className: "small", id: "allChangesLink", href: "/study-changes", textContent: "4년 사이 바뀐 세법 모아 보기 →" }));
+  else changes.append(empty("세무 단원용 칸이라 재무회계·원가회계는 비워 둡니다."));
   view.append(changes);
 
   // ⑦ 5문제 풀기

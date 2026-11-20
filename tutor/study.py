@@ -12,6 +12,7 @@ from .analysis import unit_profile
 from .glossary import load_glossary
 from .quiz import public_question
 from .records import notebook
+from .notice import tax_changes
 from .search import LATEST_ROUNDS
 from .summary import collect_sentences, merge_sentences
 
@@ -20,6 +21,9 @@ CARDS = (("재무회계", "재무회계"), ("원가회계", "원가관리회계"
 STATUSES = ("", "read", "understood")                 # '' = 아직 안 봄
 AI_SECTIONS = ("concept", "practice", "formula")      # AI 초안이라 사람이 '검토 완료' 로 바꿔야 하는 칸
 MIN_SENTENCE_LENGTH = 12                              # 이보다 짧은 조각은 문장이 아니다
+TAX_SUBJECT = "세무회계"
+CHANGES_GAP = "2023·2024·2026 개정 자료 없음 — 확인 필요"     # 2025 개정세법 PDF 한 권만 있다. 다른 해 개정은 지어내지 않는다.
+CHANGES_SOURCE = "2025 개정세법(한국세무사회 전체 통합본) PDF 쪽수(인쇄된 쪽 번호 = PDF 쪽수 − 16)"
 SENTENCE_LIMIT = 8                                    # 시험에 나온 문장: 맞는 문장·함정 각각
 
 
@@ -42,9 +46,35 @@ def note_path(subject, unit, study_dir=None):
 
 
 def load_note(subject, unit, study_dir=None):
-    """노트 파일을 읽는다. 파일이 없으면 None(화면에는 '노트 준비 중' 으로 보인다)."""
-    path = note_path(subject, unit, study_dir)
-    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    """노트 파일을 읽는다. 세무회계는 data/study/세무회계/<세목>/<단원>.json(단원 이름은 과목 안에서 겹치지 않는다).
+    파일이 없으면 None(화면에는 '노트 준비 중' 으로 보인다)."""
+    base = Path(study_dir or STUDY_DIR) / subject
+    for path in (note_path(subject, unit, study_dir), *sorted(base.glob(f"*/{unit}.json"))):
+        if path.is_file():
+            return json.loads(path.read_text(encoding="utf-8"))
+    return None
+
+
+def note_text(note):
+    """노트 개념·바뀐 것 글을 한 덩어리로(세법 메모 연결에 쓴다)."""
+    lines = [l["text"] for l in (note.get("concept") or {}).get("lines", [])]
+    return " ".join(lines + [f'{c["what"]} {c["how"]}' for c in note.get("changes") or [] if isinstance(c, dict)])
+
+
+def change_memos(tax, unit, note):
+    """data/tax_changes.json 메모 중 이 단원에 닿는 것. 규칙: 세목이 같거나 비어 있고, (단원 이름을 적었으면 그 단원만 /
+    안 적었으면 핵심어가 단원 이름이나 노트 글에 있을 때)."""
+    text = note_text(note) if note else ""
+    out = []
+    for memo in tax_changes():
+        if memo.get("tax") and memo["tax"] != tax:
+            continue
+        if memo.get("unit") and memo["unit"] != unit:
+            continue
+        if not memo.get("unit") and memo["keyword"] not in unit and memo["keyword"] not in text:
+            continue
+        out.append({"year": memo.get("year"), "keyword": memo["keyword"], "memo": memo["memo"]})
+    return out
 
 
 def overview(conn, subject, tax, unit):
@@ -98,8 +128,25 @@ def get_note(conn, unit):
         concept = note.get("concept") or {}
         out["note"] = {"concept": {"lines": concept.get("lines", []),
                                    "terms": [{"term": t, "meaning": meanings.get(t, "")} for t in concept.get("terms", [])]},
-                       "practice": note.get("practice") or [], "formula": formula, "changes": note.get("changes") or []}
+                       "practice": note.get("practice") or [], "formula": formula, "changes": note.get("changes") or [],
+                       "change_memos": change_memos(tax, name, note) if subject == TAX_SUBJECT else [],
+                       "change_gap": CHANGES_GAP if subject == TAX_SUBJECT else ""}
     return out
+
+
+def changes_overview(conn):
+    """'4년 사이 바뀐 세법 모아 보기': 세무 노트의 ⑥ 칸만 세목별로 모은다(쪽수 출처 포함). 단원에 연결되지 않은 메모는 따로 보인다."""
+    taxes, linked = {}, set()
+    for subject, tax, unit in unit_rows(conn):
+        if subject != TAX_SUBJECT:
+            continue
+        note = load_note(subject, unit)
+        items = [c for c in (note or {}).get("changes") or [] if isinstance(c, dict)]
+        memos = change_memos(tax, unit, note)
+        linked.update((m["keyword"], m["memo"]) for m in memos)
+        taxes.setdefault(tax, []).append({"unit": unit, "items": items, "memos": memos})
+    loose = [{"year": m.get("year"), "keyword": m["keyword"], "memo": m["memo"], "tax": m.get("tax")} for m in tax_changes() if (m["keyword"], m["memo"]) not in linked]
+    return {"taxes": [{"tax": t, "units": u} for t, u in taxes.items()], "loose_memos": loose, "gap": CHANGES_GAP, "source": CHANGES_SOURCE}
 
 
 def save_progress(conn, unit, status):

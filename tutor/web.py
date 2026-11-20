@@ -26,7 +26,7 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html"}
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
@@ -180,6 +180,7 @@ ROUTES = {
     ("POST", "/api/mock/submit"): lambda conn, params, body: (200, mock.grade(conn, body.get("ids") or [], body.get("answers") or {})),
     ("GET", "/api/study"): lambda conn, params, body: (200, {"cards": study.curriculum(conn), "roadmap": study.roadmap(conn)}),
     ("GET", "/api/study/note"): api_study_note,
+    ("GET", "/api/study/changes"): lambda conn, params, body: (200, study.changes_overview(conn)),
     ("POST", "/api/study/progress"): api_study_progress,
     ("POST", "/api/study/review"): api_study_review,
     ("GET", "/api/glossary_review"): lambda conn, params, body: (200, {"rows": glossary_review.list_rows(conn)}),
