@@ -17,6 +17,7 @@
     <button class="tab" data-tab="analysis">문제 분석</button>
     <button class="tab" data-tab="words">단어 주석</button>
     <a class="tab-link" href="/study">공부</a>
+    <a class="tab-link" href="/plan">계획</a>
     <a class="tab-link" href="/calendar">캘린더</a>
     <a class="tab-link" href="/toc">목차</a>
   </nav></div>
@@ -480,7 +481,7 @@ async function loadToday() {
   settings.append(form);
   card.replaceChildren(head,
     el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date} · `,
-      el("a", { id: "calendarLink", href: "/calendar", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
+      el("a", { id: "calendarLink", href: data.plan ? "/calendar" : "/plan", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
     list, week, settings, el("div", { className: "small", id: "todayMsg" }));
 }
 loadToday();

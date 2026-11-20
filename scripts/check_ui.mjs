@@ -813,7 +813,9 @@ async function main() {
         return { brand: r(document.querySelector('.topbar .brand')), wrap: r(wrap), user: r(document.querySelector('.topbar .userbox')), bar: r(document.querySelector('.topbar')),
                  overflow: getComputedStyle(wrap).overflowX, left: nav.scrollLeft > 2, right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2 };
       })()`);
-      if (g.overflow !== "hidden") problems.push(`${label}: 탭 줄 바깥이 잘리지 않음`);
+      const narrow = await page.evaluate(`window.innerWidth <= 560`);
+      if (narrow && g.overflow !== "hidden") problems.push(`${label}: 모바일은 탭 줄 바깥을 잘라야 함`);
+      if (!narrow && (g.overflow !== "visible" || g.left || g.right)) problems.push(`${label}: 데스크톱 폭에서는 탭이 잘리지 않고 줄바꿈되어야 함`);
       if (g.brand.r > g.wrap.l + 0.5) problems.push(`${label}: 로고와 탭 줄이 겹침`);
       if (g.user && g.wrap.r > g.user.l + 0.5) problems.push(`${label}: 탭 줄과 계정 버튼이 겹침`);
       const top = Math.ceil(g.bar.t) + 6, height = Math.max(8, Math.floor(g.bar.b - g.bar.t) - 14);
@@ -949,6 +951,34 @@ async function main() {
     await page.viewport(1100, 900, false);
     const q = await page.evaluate(`api('/api/question?round=127&number=12').then((r) => r.data)`);
     assert(q.subject === "세무회계" && q.exam_basis === "2026년 8월 시행 시험 기준", "세무 문항에 시험 기준 문구: " + JSON.stringify([q.subject, q.exam_basis]));
+  });
+
+  await scenario("노트북·데스크톱 폭에서 모든 탭(계획·캘린더·목차 포함)이 화면 안에 보이고, 계획 없는 오늘의 공부 카드 링크는 /plan", async () => {
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    for (const width of [1000, 1280]) {
+      await page.viewport(width, 800, false);
+      for (const path of ["/", "/study", "/calendar", "/plan", "/ox", "/toc"]) {
+        await page.goto(base + path);
+        await page.waitFor(`document.querySelectorAll('.topbar .tab, .topbar .tab-link').length >= 10`, `탭 ${path}`);
+        const r = await page.evaluate(`(() => {
+          const tabs = [...document.querySelectorAll('.topbar .tab, .topbar .tab-link')];
+          const labels = tabs.map((t) => t.textContent.trim());
+          const out = tabs.filter((t) => { const b = t.getBoundingClientRect(); return b.width === 0 || b.left < 0 || b.right > window.innerWidth || b.top < 0 || b.bottom > document.querySelector('.topbar').getBoundingClientRect().bottom + 1; }).map((t) => t.textContent.trim());
+          const plan = tabs.find((t) => t.textContent.trim() === '계획');
+          return { labels, out, planHref: plan && plan.getAttribute('href'), scroll: document.documentElement.scrollWidth <= window.innerWidth + 1 };
+        })()`);
+        for (const need of ["계획", "캘린더", "목차", "공부"]) assert(r.labels.includes(need), `${width}px ${path}: '${need}' 탭이 없음 ${JSON.stringify(r.labels)}`);
+        assert(r.out.length === 0, `${width}px ${path}: 화면 밖으로 잘린 탭 ${JSON.stringify(r.out)}`);
+        assert(r.planHref === "/plan" && r.scroll, `${width}px ${path}: 계획 탭 링크/가로 스크롤 ${JSON.stringify(r)}`);
+      }
+    }
+    await page.viewport(1000, 800, false);
+    await page.goto(base + "/");
+    await page.shotTo("탭-1000", NUM_SHOTS);
+    await page.waitFor(`document.getElementById('calendarLink')`, "오늘의 공부 카드 링크");
+    const link = await page.evaluate(`({ text: document.getElementById('calendarLink').textContent, href: document.getElementById('calendarLink').getAttribute('href') })`);
+    assert(link.text === "계획 세우기" && link.href === "/plan", "계획이 없으면 카드 링크가 /plan: " + JSON.stringify(link));
+    await page.viewport(1100, 900, false);
   });
 
   await scenario("콘솔 오류가 없다", async () => {

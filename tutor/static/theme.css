@@ -81,6 +81,13 @@ code { font-size: 13px; background: var(--accent-soft); border-radius: var(--s1)
 .tabs-wrap.more.more-left .tabs { -webkit-mask-image: linear-gradient(to right, transparent 0, transparent 12px, #000 36px, #000 calc(100% - 36px), transparent calc(100% - 12px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, transparent 12px, #000 36px, #000 calc(100% - 36px), transparent calc(100% - 12px), transparent 100%); }
 .tabs { position: relative; display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; min-width: 0; padding: var(--s1) 0; }
 .tabs::-webkit-scrollbar { display: none; }
+/* 데스크톱·노트북 폭(561px 이상)에서는 탭이 잘리지 않게 줄바꿈하고, 모바일(560px 이하)만 가로 스크롤한다 */
+@media (min-width: 561px) {
+  .topbar-inner { max-width: 1180px; gap: var(--s3); }
+  .tabs-wrap { overflow: visible; }
+  .tabs { flex-wrap: wrap; overflow: visible; row-gap: 0; justify-content: center; }
+  .tab, .tab-link { padding: var(--s1) var(--s3); }
+}
 .tab, .tab-link { flex: none; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); padding: var(--s1) var(--s4); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
 .tab:hover, .tab-link:hover { background: var(--accent-soft); color: var(--accent); }
 .tab.active, .tab-link.active { background: var(--accent); color: var(--on-accent); }

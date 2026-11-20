@@ -1,4 +1,6 @@
 """계획 세우기·계획↔실제 매칭·캘린더·비밀번호: 계획 생성 규칙, 고친 날 보존, 날짜 넘기며 부분→완료, 사용자별 분리."""
+from pathlib import Path
+
 import pytest
 
 from test_ox_review_daily import db  # noqa: F401  (문제은행·시계 되돌리기 fixture)
@@ -342,3 +344,14 @@ def test_today_card_total_is_split_across_units(db):
     assert len(units) == 3
     assert sum(t["need"] for t in card["tasks"] if t["kind"] == "ox") <= 20
     assert sum(t["need"] for t in card["tasks"] if t["kind"] == "quiz") <= 5
+
+
+def test_top_tabs_have_plan_before_calendar_and_card_links_to_plan_when_no_plan():
+    static = Path(__file__).resolve().parent.parent / "tutor" / "static"
+    js = (static / "quizcard.js").read_text(encoding="utf-8")
+    assert '["study", "공부"], ["plan", "계획"], ["calendar", "캘린더"], ["toc", "목차"]' in js
+    html = (static / "index.html").read_text(encoding="utf-8")
+    assert 'href="/plan">계획</a>' in html
+    assert 'href: data.plan ? "/calendar" : "/plan"' in html
+    css = (static / "theme.css").read_text(encoding="utf-8")
+    assert "@media (min-width: 561px)" in css and "flex-wrap: wrap" in css          # 데스크톱 폭에서는 탭이 줄바꿈, 모바일만 가로 스크롤
