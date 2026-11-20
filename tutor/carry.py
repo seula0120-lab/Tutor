@@ -14,13 +14,14 @@ from .quiz import list_units
 CAP = 1.5                         # 하루 총량 상한 = 설정 × 1.5
 MOCK_CAP = 1                      # 모의고사는 하루 1회까지
 ADD_OX, ADD_QUIZ = 5, 3           # 약한 단원 복습 추가: 공부일마다 O/X 5개·기출 3문제
+CARRY_KINDS = ("note", "ox", "quiz", "mock")      # 복습(review)은 그날 틀린 것 기준이라 넘기지 않는다
 KIND_ORDER = {k: i for i, k in enumerate(match.KINDS)}
 
 
 def _caps(conn):
-    d, s = daily.get_settings(conn), plan.get_settings(conn)
+    d = daily.get_settings(conn)
     return {"note": int(CAP * d["daily_notes"]), "ox": int(CAP * d["daily_ox"]), "quiz": int(CAP * d["daily_questions"]),
-            "review": int(CAP * s["review_per_day"]), "mock": MOCK_CAP}
+            "mock": MOCK_CAP}
 
 
 def study_days(conn, first):
@@ -67,7 +68,7 @@ def pending(conn, today=None):
         if report["state"] not in ("partial", "missed"):
             continue
         for item in report["items"]:
-            if item["skipped"]:
+            if item["skipped"] or item["kind"] not in CARRY_KINDS:
                 continue
             short = max(item["need"] - item["actual"], 0) - done.get((report["day"], item["kind"], item["unit"]), 0)
             if short > 0:

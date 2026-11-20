@@ -137,7 +137,7 @@ def plan_rows_by_day(conn, first, last):
                           (conn.user_id, first, last)):
         rows.setdefault(r["day"], []).append(dict(r))
     # 넘어온 것(carry)·추가한 복습(review)은 같은 항목의 목표에 더한다(실제 기록은 하나라 따로 세면 이중 계산이 된다)
-    for r in conn.execute("SELECT source, from_day, kind, unit, to_day, amount FROM plan_carry WHERE user_id = ? AND to_day BETWEEN ? AND ? ORDER BY to_day, from_day",
+    for r in conn.execute("SELECT source, from_day, kind, unit, to_day, amount FROM plan_carry WHERE user_id = ? AND kind != 'review' AND to_day BETWEEN ? AND ? ORDER BY to_day, from_day",
                           (conn.user_id, first, last)):
         day_rows = rows.setdefault(r["to_day"], [])
         row = next((x for x in day_rows if x["kind"] == r["kind"] and x["unit"] == r["unit"]), None)

@@ -196,3 +196,15 @@ def test_carry_and_review_week_api(db):
     status, body = dispatch("POST", "/api/review-week/add", {}, {"unit": "없는 단원"}, db)
     assert status == 400
     assert dispatch("GET", "/api/calendar", {"month": clock.iso(clock.today())[:7]}, {}, db)[1]["header"]["carry"]["count"] >= 0
+
+
+def test_review_is_never_pending_or_carried(db):
+    first, today = miss_a_day(db)
+    assert any(r["kind"] == "review" for r in rows(db, first))                    # 복습이 미달인 날이 있다
+    assert not [p for p in carry.pending(db) if p["kind"] == "review"]
+    carry.carry_over(db)
+    assert db.execute("SELECT COUNT(*) AS n FROM plan_carry WHERE user_id = ? AND kind = 'review'", (db.user_id,)).fetchone()["n"] == 0
+    with db:                                                                      # 예전에 저장된 복습 이월 줄이 있어도 계산에 안 들어간다
+        db.execute("INSERT INTO plan_carry(user_id, source, from_day, kind, unit, to_day, amount) VALUES (?, 'carry', ?, 'review', '', ?, 4)", (db.user_id, first, today))
+    got = [i for i in schedule.day_detail(db, today)["items"] if i["kind"] == "review"]
+    assert got and all(i["carried"] == 0 for i in got)

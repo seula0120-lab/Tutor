@@ -1016,11 +1016,13 @@ async function main() {
     await page.waitFor(`document.querySelectorAll('#planTable .carry-badge').length >= 1`, "캘린더 상세에 이월 표시");
     await page.evaluate(`document.querySelector('#dayPanel').scrollIntoView(); true`);
     await sleep(200);
+    assert(await page.evaluate(`![...document.querySelectorAll('#planTable tbody tr')].some((tr) => tr.textContent.startsWith('복습') && tr.querySelector('.carry-badge'))`), "복습 이월 없음(캘린더)");
     await page.shotTo("넘긴뒤-캘린더", CARRY_SHOTS);
     await page.goto(base + "/");
     await page.waitFor(`document.querySelectorAll('#todayList .carry-badge').length >= 1`, "오늘 카드 이월 표시");
     const note = await page.evaluate(`document.querySelector('#todayList .carry-badge').textContent`);
     assert(note.endsWith("에서 넘어옴"), "카드 표시: " + note);
+    assert(await page.evaluate(`![...document.querySelectorAll('#todayList .today-row')].some((r) => r.textContent.startsWith('복습') && r.querySelector('.carry-badge'))`), "복습 이월 없음(오늘 카드)");
     await page.shotTo("오늘카드-이월", CARRY_SHOTS);
     await page.goto(base + "/calendar");
     await page.waitFor(`document.getElementById('weekLink')`, "주간 돌아보기 링크");
