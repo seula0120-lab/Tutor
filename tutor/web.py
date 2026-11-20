@@ -6,11 +6,12 @@ dispatch() 는 소켓 없이 (상태코드, 내용) 만 돌려주는 함수라 �
 import argparse
 import json
 import threading
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import clock, daily, favorites, glossary_review, mock, ox, quiz, records, review, study
+from . import auth, clock, daily, favorites, glossary_review, mock, ox, quiz, records, review, study
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -27,7 +28,11 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html"}
+LOGIN_PAGE = "login.html"          # 로그인 없이 볼 수 있는 화면은 이것 하나(/login)
+COOKIE = "session"
+ADMIN_PAGES = {"/admin"}
+LOCAL_ADDRESSES = ("127.0.0.1", "::1")
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
@@ -174,6 +179,50 @@ def api_test_clock(conn, params, body):
     return 200, {"offset": clock.offset(), "date": clock.iso(clock.today())}
 
 
+def _admin_only(conn):
+    return conn.user is not None and conn.user["is_admin"]
+
+
+def api_users(conn, params, body):
+    """계정 관리(관리자만): 목록 보기·계정 만들기. 공개 회원가입은 없다."""
+    if not _admin_only(conn):
+        return 403, {"error": "관리자만 할 수 있습니다."}
+    return 200, {"users": auth.list_users(conn)}
+
+
+def api_users_create(conn, params, body):
+    if not _admin_only(conn):
+        return 403, {"error": "관리자만 할 수 있습니다."}
+    user = auth.create_user(conn, body.get("username"), body.get("password"), body.get("name", ""), is_admin=bool(body.get("is_admin")))
+    return 200, {"user": user, "users": auth.list_users(conn)}
+
+
+def auth_dispatch(method, path, body, conn, token, local):
+    """로그인 없이 부를 수 있는 길(상태, 내용, 쿠키 동작). 쿠키 동작: None | ('set', 토큰) | ('clear',). 로그인 길이 아니면 None."""
+    if (method, path) == ("GET", "/api/me"):
+        return 200, {"user": auth.user_for_token(conn, token), "needs_setup": not auth.has_users(conn)}, None
+    if (method, path) == ("POST", "/api/login"):
+        try:
+            user = auth.authenticate(conn, body.get("username"), body.get("password"))
+        except auth.LoginError as err:
+            return 401, {"error": str(err)}, None
+        return 200, {"user": user}, ("set", auth.create_session(conn, user["id"]))
+    if (method, path) == ("POST", "/api/setup"):
+        if auth.has_users(conn):
+            return 403, {"error": "이미 계정이 있습니다."}, None
+        if not local:
+            return 403, {"error": "첫 관리자 계정은 서버가 있는 컴퓨터에서 만들어야 합니다."}, None
+        try:
+            user = auth.create_first_admin(conn, body.get("username"), body.get("password"), body.get("name", ""))
+        except ValueError as err:
+            return 400, {"error": str(err)}, None
+        return 200, {"user": user}, ("set", auth.create_session(conn, user["id"]))
+    if (method, path) == ("POST", "/api/logout"):
+        auth.delete_session(conn, token)
+        return 200, {"ok": True}, ("clear",)
+    return None
+
+
 def api_glossary_review_save(conn, params, body):
     """용어 하나의 검토 상태·메모·수정 제안을 저장한다(사전 원본은 바꾸지 않는다)."""
     glossary_review.save_review(conn, body.get("term", ""), body.get("status", ""), body.get("memo") or "",
@@ -213,6 +262,8 @@ ROUTES = {
     ("GET", "/api/today"): lambda conn, params, body: (200, daily.today_card(conn)),
     ("POST", "/api/settings"): api_settings_save,
     ("POST", "/api/test/clock"): api_test_clock,
+    ("GET", "/api/users"): api_users,
+    ("POST", "/api/users"): api_users_create,
     ("GET", "/api/glossary_review"): lambda conn, params, body: (200, {"rows": glossary_review.list_rows(conn)}),
     ("POST", "/api/glossary_review"): api_glossary_review_save,
     ("POST", "/api/ask"): lambda conn, params, body: api_ask(conn, body),
@@ -233,18 +284,42 @@ def dispatch(method, path, params, body, conn):
 class Handler(BaseHTTPRequestHandler):
     db_path = None  # 테스트에서 임시 DB 를 쓰려고 바꿔 끼울 수 있다
 
+    def _token(self):
+        cookie = SimpleCookie(self.headers.get("Cookie") or "")
+        return cookie[COOKIE].value if COOKIE in cookie else ""
+
+    def _redirect(self, where):
+        self.send_response(302)
+        self.send_header("Location", where)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self):
-        """화면·정적 파일은 그대로 내보내고, 나머지는 dispatch 로 보낸다."""
+        """글꼴·스타일은 누구나, 화면은 로그인한 사람만(아니면 /login 으로), 나머지는 dispatch 로 보낸다."""
         url = urlparse(self.path)
         path = unquote(url.path)
-        if path.startswith("/study/"):                       # /study/<단원>: 같은 화면이 주소의 단원 이름을 읽는다
-            path = "/study"
-        if path in PAGES:
-            return self._send_bytes(200, (STATIC_DIR / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
         if url.path.startswith("/static/fonts/") and url.path.rsplit("/", 1)[1] in FONT_FILES:
             return self._send_bytes(200, (STATIC_DIR / "fonts" / url.path.rsplit("/", 1)[1]).read_bytes(), "font/woff2")
         if url.path in STATIC_FILES:
             return self._send_bytes(200, (STATIC_DIR / STATIC_FILES[url.path][0]).read_bytes(), STATIC_FILES[url.path][1])
+        if path.startswith("/study/"):                       # /study/<단원>: 같은 화면이 주소의 단원 이름을 읽는다
+            path = "/study"
+        if path == "/login" or path in PAGES:
+            conn = connect(self.db_path)
+            try:
+                user = auth.user_for_token(conn, self._token())
+                setup = not auth.has_users(conn)
+            finally:
+                conn.close()
+            if path == "/login":
+                return self._redirect("/") if user else self._send_bytes(200, (STATIC_DIR / LOGIN_PAGE).read_bytes(), "text/html; charset=utf-8")
+            if user is None:
+                return self._redirect("/login")
+            if path in ADMIN_PAGES and not user["is_admin"]:
+                return self._redirect("/")
+            return self._send_bytes(200, (STATIC_DIR / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
+        if not url.path.startswith("/api/"):
+            return self._send_json(404, {"error": "없는 주소입니다."})
         params = {k: v[0] for k, v in parse_qs(url.query).items()}
         self._reply("GET", url.path, params, {})
 
@@ -258,19 +333,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def _reply(self, method, path, params, body):
         conn = connect(self.db_path)
+        cookie = None
         try:
-            status, payload = dispatch(method, path, params, body, conn)
+            token = self._token()
+            routed = auth_dispatch(method, path, body if isinstance(body, dict) else {}, conn, token, self.client_address[0] in LOCAL_ADDRESSES)
+            if routed is not None:
+                status, payload, cookie = routed
+            else:
+                user = auth.user_for_token(conn, token)
+                if user is None:
+                    status, payload = 401, {"error": "로그인이 필요합니다."}
+                else:
+                    conn.user_id, conn.user = user["id"], user
+                    status, payload = dispatch(method, path, params, body, conn)
         finally:
             conn.close()
-        self._send_json(status, payload)
+        self._send_json(status, payload, cookie)
 
-    def _send_json(self, status, payload):
+    def _send_json(self, status, payload, cookie=None):
         self._send_bytes(status, json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-                         "application/json; charset=utf-8")
+                         "application/json; charset=utf-8", cookie)
 
-    def _send_bytes(self, status, data, content_type):
+    def _send_bytes(self, status, data, content_type, cookie=None):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
+        self.send_header("Cache-Control", "no-store")
+        if cookie:
+            value, age = (cookie[1], auth.SESSION_SECONDS) if cookie[0] == "set" else ("", 0)
+            self.send_header("Set-Cookie", f"{COOKIE}={value}; HttpOnly; SameSite=Lax; Path=/; Max-Age={age}")
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
@@ -303,11 +393,12 @@ def main():
     """서버를 켠다(시작할 때 새 회차를 한 번 반영)."""
     parser = argparse.ArgumentParser(description="전산세무 1급 이론 튜터 (로컬 웹)")
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", default=HOST, help="기본은 이 컴퓨터만(127.0.0.1). 같은 공유기의 다른 기기에서도 쓰려면 0.0.0.0")
     args = parser.parse_args()
     startup_sync()
     threading.Thread(target=warm_up, daemon=True).start()
-    server = ThreadingHTTPServer((HOST, args.port), Handler)
-    print(f"http://{HOST}:{args.port}/ 에서 실행 중입니다. 끝내려면 Ctrl+C.")
+    server = ThreadingHTTPServer((args.host, args.port), Handler)
+    print(f"http://{args.host}:{args.port}/ 에서 실행 중입니다. 끝내려면 Ctrl+C.")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

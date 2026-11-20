@@ -248,3 +248,13 @@ h2 { font-size: 17px; margin: 0 0 var(--s2); }
 .ox-btn.wrong { outline: 3px solid var(--bad); }
 .ox-btn:disabled { opacity: 1; }
 .ox-card .ox-result { margin-top: var(--s2); }
+
+/* 로그인 표시·로그인 화면 */
+.userbox { margin-left: auto; display: flex; align-items: center; gap: var(--s2); white-space: nowrap; }
+.userbox .ghost { padding: var(--s1) var(--s2); }
+.login-card { max-width: 380px; margin: var(--s6) auto; }
+.login-card label { display: block; margin-top: var(--s3); font-weight: 600; }
+.login-card input { width: 100%; box-sizing: border-box; padding: var(--s2); font: inherit; border: 1px solid var(--line); border-radius: var(--s2); background: var(--surface); color: var(--text); }
+.login-card button { margin-top: var(--s4); width: 100%; padding: var(--s2); }
+.login-error { color: var(--bad); margin-top: var(--s3); min-height: 1.4em; }
+@media (max-width: 560px) { #userName { display: none; } }

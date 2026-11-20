@@ -12,3 +12,4 @@ data/tutor.db
 data/raw/
 data/export/
 scratch/
+data/*.before-login.bak

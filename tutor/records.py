@@ -16,14 +16,14 @@ def save(conn, question_id, choice, correct, *, seen_only=False, source="quiz", 
     choice = str(choice)
     correct_value = None if seen_only else int(bool(correct))
     last = conn.execute("""SELECT choice, correct, seen_only, source, ts FROM records
-                           WHERE question_id = ? ORDER BY id DESC LIMIT 1""", (question_id,)).fetchone()
+                           WHERE user_id = ? AND question_id = ? ORDER BY id DESC LIMIT 1""", (conn.user_id, question_id)).fetchone()
     if (last and last["choice"] == choice and last["correct"] == correct_value
             and last["seen_only"] == int(seen_only) and last["source"] == source
             and 0 <= now - last["ts"] < DEDUPE_SECONDS):
         return False
     with conn:
-        conn.execute("INSERT INTO records(question_id, choice, correct, seen_only, source, ts) VALUES (?,?,?,?,?,?)",
-                     (question_id, choice, correct_value, int(seen_only), source, now))
+        conn.execute("INSERT INTO records(user_id, question_id, choice, correct, seen_only, source, ts) VALUES (?,?,?,?,?,?,?)",
+                     (conn.user_id, question_id, choice, correct_value, int(seen_only), source, now))
     return True
 
 
@@ -35,7 +35,7 @@ def first_line(text, limit=60):
 
 def notebook(conn, subject=None, unit=None):
     """오답노트 목록: 오답 기록이 있고 그 뒤에 정답 기록이 없는 문항. 최근에 틀린 순. 정답·해설은 넣지 않는다."""
-    where, args = [], []
+    where, args = ["r.user_id = ?"], [conn.user_id]
     for column, value in (("q.subject", subject), ("q.unit", unit)):
         if value:
             where.append(f"{column} = ?")
@@ -60,7 +60,8 @@ def unit_wrong_counts(conn):
     """단원별 틀린 횟수: 전체 오답 기록 수(wrong_total)와 지금 오답노트에 남은 문항 수(open_questions). 많이 틀린 순."""
     totals = conn.execute("""SELECT q.subject, q.tax, q.unit, COUNT(*) AS n
                              FROM records r JOIN questions q ON q.id = r.question_id
-                             WHERE r.correct = 0 AND r.seen_only = 0 GROUP BY q.subject, q.tax, q.unit""").fetchall()
+                             WHERE r.user_id = ? AND r.correct = 0 AND r.seen_only = 0 GROUP BY q.subject, q.tax, q.unit""",
+                          (conn.user_id,)).fetchall()
     open_count = {}
     for item in notebook(conn):
         key = (item["subject"], item["tax"], item["unit"])
@@ -79,14 +80,14 @@ def unit_stats(conn):
     그래서 attempts == questions(푼 문항 수), correct 는 마지막 결과가 정답인 문항 수다."""
     rows = conn.execute("""SELECT q.subject, q.tax, q.unit, COUNT(*) AS solved, SUM(r.correct = 1) AS right
                            FROM records r JOIN questions q ON q.id = r.question_id
-                           WHERE r.seen_only = 0
-                             AND r.id = (SELECT r2.id FROM records r2 WHERE r2.question_id = r.question_id AND r2.seen_only = 0
+                           WHERE r.user_id = ? AND r.seen_only = 0
+                             AND r.id = (SELECT r2.id FROM records r2 WHERE r2.user_id = r.user_id AND r2.question_id = r.question_id AND r2.seen_only = 0
                                          ORDER BY r2.ts DESC, r2.id DESC LIMIT 1)
-                           GROUP BY q.subject, q.tax, q.unit""").fetchall()
+                           GROUP BY q.subject, q.tax, q.unit""", (conn.user_id,)).fetchall()
     return {(r["subject"], r["tax"], r["unit"]): {"attempts": r["solved"], "correct": r["right"],
                                                    "questions": r["solved"]} for r in rows}
 
 
 def correct_ids(conn):
     """한 번이라도 맞힌 문항 id 집합(모의고사·추천에서 뒤로 미룰 때 쓴다)."""
-    return {r["question_id"] for r in conn.execute("SELECT DISTINCT question_id FROM records WHERE correct = 1")}
+    return {r["question_id"] for r in conn.execute("SELECT DISTINCT question_id FROM records WHERE user_id = ? AND correct = 1", (conn.user_id,))}

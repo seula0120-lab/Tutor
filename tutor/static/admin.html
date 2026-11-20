@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>계정 관리 · 회계튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main>
+<section class="paper">
+  <h2>계정 관리</h2>
+  <p class="small">관리자만 볼 수 있습니다. 공개 회원가입은 없고, 여기서 만든 계정만 로그인할 수 있습니다. 계정마다 풀이 기록·오답노트·공부 진도가 따로 쌓입니다.</p>
+  <table id="userTable"><thead><tr><th>아이디</th><th>이름</th><th>구분</th></tr></thead><tbody></tbody></table>
+</section>
+<form id="createForm" class="paper login-card" style="margin-top:var(--s4)">
+  <h3>새 계정 만들기</h3>
+  <label for="newUsername">아이디 (3~30자)</label><input id="newUsername" autocomplete="off" autocapitalize="none" required>
+  <label for="newName">이름</label><input id="newName" autocomplete="off">
+  <label for="newPassword">처음 비밀번호 (8자 이상)</label><input id="newPassword" type="password" autocomplete="new-password" required>
+  <div id="createMsg" class="login-error" role="status"></div>
+  <button id="createBtn" type="submit">계정 만들기</button>
+</form>
+</main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("");
+function draw(users) {
+  $("userTable").querySelector("tbody").replaceChildren(...users.map((u) => el("tr", {}, el("td", { textContent: u.username }), el("td", { textContent: u.name }), el("td", { textContent: u.is_admin ? "관리자" : "학습자" }))));
+}
+(async () => { const { ok, data } = await api("/api/users"); if (ok) draw(data.users); })();
+$("createForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const { ok, data } = await api("/api/users", { username: $("newUsername").value, name: $("newName").value, password: $("newPassword").value });
+  $("createMsg").textContent = ok ? "계정을 만들었습니다: " + data.user.username : (data.error || "만들 수 없습니다.");
+  if (ok) { draw(data.users); $("createForm").reset(); }
+});
+</script>
+</body>
+</html>

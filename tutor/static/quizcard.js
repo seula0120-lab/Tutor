@@ -10,6 +10,7 @@ function el(tag, props = {}, ...children) {
 async function api(path, body) {
   const options = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
   const response = await fetch(path, options);
+  if (response.status === 401 && location.pathname !== "/login") { location.href = "/login"; }   // 로그인이 풀렸다
   return { ok: response.ok, data: await response.json() };
 }
 const query = (obj) => new URLSearchParams(Object.entries(obj).filter(([, v]) => v !== "" && v != null)).toString();
@@ -146,3 +147,16 @@ async function runSession(ids, container, title) {
   }
   await step(0);
 }
+
+// 로그인한 사람 표시: 상단 바 오른쪽에 이름·(관리자면) 계정 관리·로그아웃. 모든 화면이 이 파일을 쓰므로 한 곳에서 붙인다.
+addEventListener("DOMContentLoaded", async () => {
+  const bar = document.querySelector(".topbar-inner");
+  if (!bar) return;
+  const { ok, data } = await api("/api/me");
+  if (!ok || !data.user) return;
+  const logout = el("button", { id: "logoutBtn", className: "ghost small", textContent: "로그아웃" });
+  logout.addEventListener("click", async () => { await api("/api/logout", {}); location.href = "/login"; });
+  bar.append(el("div", { id: "userbox", className: "userbox" },
+    el("span", { className: "small", id: "userName", textContent: data.user.name }),
+    ...(data.user.is_admin ? [el("a", { id: "adminLink", className: "small", href: "/admin", textContent: "계정 관리" })] : []), logout));
+});

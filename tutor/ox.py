@@ -135,7 +135,7 @@ def stats(conn):
 
 def _answered_correctly(conn):
     return {r["question_id"][len(PREFIX):] for r in conn.execute(
-        "SELECT DISTINCT question_id FROM records WHERE source = 'ox' AND correct = 1")}
+        "SELECT DISTINCT question_id FROM records WHERE user_id = ? AND source = 'ox' AND correct = 1", (conn.user_id,))}
 
 
 def pick(conn, subject=None, tax=None, unit=None, count=20, rng=random):

@@ -31,7 +31,7 @@ def states(conn):
     """{기록 대상 id: 복습 상태}. 대상 id 는 기출 문항 id('128-1') 또는 'ox:<키>'. 한 번도 틀린 적 없으면 없다."""
     out = {}
     for r in conn.execute("""SELECT question_id, correct, ts FROM records
-                             WHERE seen_only = 0 AND correct IS NOT NULL ORDER BY id"""):
+                             WHERE user_id = ? AND seen_only = 0 AND correct IS NOT NULL ORDER BY id""", (conn.user_id,)):
         state = advance(out.get(r["question_id"]), clock.day_of(r["ts"]), bool(r["correct"]))
         if state is not None:
             out[r["question_id"]] = state

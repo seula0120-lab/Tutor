@@ -103,11 +103,11 @@ def unit_sentences(conn, subject, tax, unit):
 
 
 def reviewed_sections(conn, unit):
-    return {r["section"] for r in conn.execute("SELECT section FROM study_review WHERE unit = ?", (unit,))}
+    return {r["section"] for r in conn.execute("SELECT section FROM study_review WHERE user_id = ? AND unit = ?", (conn.user_id, unit))}
 
 
 def get_status(conn, unit):
-    row = conn.execute("SELECT status FROM study_progress WHERE unit = ?", (unit,)).fetchone()
+    row = conn.execute("SELECT status FROM study_progress WHERE user_id = ? AND unit = ?", (conn.user_id, unit)).fetchone()
     return row["status"] if row else ""
 
 
@@ -155,8 +155,8 @@ def save_progress(conn, unit, status):
     if status not in STATUSES:
         raise ValueError("진도 값이 올바르지 않습니다.")
     with conn:
-        conn.execute("INSERT INTO study_progress(unit, status, updated) VALUES (?,?,?) "
-                     "ON CONFLICT(unit) DO UPDATE SET status=excluded.status, updated=excluded.updated", (unit, status, clock.now()))
+        conn.execute("INSERT INTO study_progress(user_id, unit, status, updated) VALUES (?,?,?,?) "
+                     "ON CONFLICT(user_id, unit) DO UPDATE SET status=excluded.status, updated=excluded.updated", (conn.user_id, unit, status, clock.now()))
     return status
 
 
@@ -167,14 +167,14 @@ def set_review(conn, unit, section, reviewed):
         raise ValueError("검토할 수 없는 칸입니다.")
     with conn:
         if reviewed:
-            conn.execute("INSERT OR REPLACE INTO study_review(unit, section, updated) VALUES (?,?,?)", (unit, section, clock.now()))
+            conn.execute("INSERT OR REPLACE INTO study_review(user_id, unit, section, updated) VALUES (?,?,?,?)", (conn.user_id, unit, section, clock.now()))
         else:
-            conn.execute("DELETE FROM study_review WHERE unit = ? AND section = ?", (unit, section))
+            conn.execute("DELETE FROM study_review WHERE user_id = ? AND unit = ? AND section = ?", (conn.user_id, unit, section))
     return sorted(reviewed_sections(conn, unit))
 
 
 def _statuses(conn):
-    return {r["unit"]: r["status"] for r in conn.execute("SELECT unit, status FROM study_progress")}
+    return {r["unit"]: r["status"] for r in conn.execute("SELECT unit, status FROM study_progress WHERE user_id = ?", (conn.user_id,))}
 
 
 def curriculum(conn):

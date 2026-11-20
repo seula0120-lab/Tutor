@@ -19,7 +19,7 @@ LABELS = {"daily_notes": "하루 노트 수", "daily_ox": "하루 O/X 개수", "
 
 def get_settings(conn):
     out = dict(DEFAULTS)
-    for r in conn.execute("SELECT key, value FROM settings"):
+    for r in conn.execute("SELECT key, value FROM settings WHERE user_id = ?", (conn.user_id,)):
         if r["key"] in out:
             out[r["key"]] = r["value"]
     return out
@@ -40,13 +40,13 @@ def save_settings(conn, values):
         clean[key] = number
     with conn:
         for key, number in clean.items():
-            conn.execute("INSERT INTO settings(key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, number))
+            conn.execute("INSERT INTO settings(user_id, key, value) VALUES (?,?,?) ON CONFLICT(user_id, key) DO UPDATE SET value=excluded.value", (conn.user_id, key, number))
     return get_settings(conn)
 
 
 def plan_units(conn, today, notes):
     """오늘 공부할 단원 이름 목록(notes 개). 이미 정한 것은 유지하고 모자라면 복귀 순서에서 채운다."""
-    row = conn.execute("SELECT units FROM daily_plan WHERE day = ?", (today,)).fetchone()
+    row = conn.execute("SELECT units FROM daily_plan WHERE user_id = ? AND day = ?", (conn.user_id, today)).fetchone()
     units = json.loads(row["units"]) if row else []
     if len(units) < notes:
         for r in study.roadmap(conn):
@@ -56,7 +56,7 @@ def plan_units(conn, today, notes):
                 units.append(r["unit"])
     units = units[:notes]
     with conn:
-        conn.execute("INSERT INTO daily_plan(day, units) VALUES (?,?) ON CONFLICT(day) DO UPDATE SET units=excluded.units", (today, json.dumps(units, ensure_ascii=False)))
+        conn.execute("INSERT INTO daily_plan(user_id, day, units) VALUES (?,?,?) ON CONFLICT(user_id, day) DO UPDATE SET units=excluded.units", (conn.user_id, today, json.dumps(units, ensure_ascii=False)))
     return units
 
 
@@ -71,7 +71,7 @@ def _solved_today(conn, today, source_sql, unit_of):
     """오늘 푼 기록 수(확인만 한 기록 제외). unit_of(question_id) 가 단원 이름을 돌려준다."""
     start, end = _day_range(today)
     counts = {}
-    for r in conn.execute(f"SELECT question_id FROM records WHERE seen_only = 0 AND correct IS NOT NULL AND ts >= ? AND ts < ? AND {source_sql}", (start, end)):
+    for r in conn.execute(f"SELECT question_id FROM records WHERE user_id = ? AND seen_only = 0 AND correct IS NOT NULL AND ts >= ? AND ts < ? AND {source_sql}", (conn.user_id, start, end)):
         unit = unit_of(r["question_id"])
         if unit:
             counts[unit] = counts.get(unit, 0) + 1
@@ -93,7 +93,7 @@ def today_plan(conn, today=None):
                             lambda qid: (ox_pool.get(qid[len(ox.PREFIX):]) or {}).get("unit"))
     quiz_done = _solved_today(conn, today, "source IN ('quiz', 'mock')", unit_of_question.get)
     start, end = _day_range(today)
-    noted = {r["unit"] for r in conn.execute("SELECT unit FROM study_progress WHERE status != '' AND updated >= ? AND updated < ?", (start, end))}
+    noted = {r["unit"] for r in conn.execute("SELECT unit FROM study_progress WHERE user_id = ? AND status != '' AND updated >= ? AND updated < ?", (conn.user_id, start, end))}
 
     tasks = [{"key": "review", "kind": "review", "label": "복습", "unit": "", "need": due["due_count"], "have": 0,
               "done": due["due_count"] == 0, "detail": (f"오늘 복습할 문항·문장 {due['due_count']}개" if due["due_count"] else "오늘 복습할 것이 없습니다.")}]
@@ -114,8 +114,8 @@ def today_plan(conn, today=None):
 
 
 def _activity_days(conn):
-    days = {clock.day_of(r["ts"]) for r in conn.execute("SELECT ts FROM records")}
-    days |= {clock.day_of(r["updated"]) for r in conn.execute("SELECT updated FROM study_progress WHERE status != ''")}
+    days = {clock.day_of(r["ts"]) for r in conn.execute("SELECT ts FROM records WHERE user_id = ?", (conn.user_id,))}
+    days |= {clock.day_of(r["updated"]) for r in conn.execute("SELECT updated FROM study_progress WHERE user_id = ? AND status != ''", (conn.user_id,))}
     return days
 
 
@@ -136,7 +136,7 @@ def week(conn, today=None):
     today = clock.today() if today is None else today
     rows = {d: {"ox": [0, 0], "quiz": [0, 0]} for d in range(today - 6, today + 1)}
     start, _ = _day_range(today - 6)
-    for r in conn.execute("SELECT source, correct, ts FROM records WHERE seen_only = 0 AND correct IS NOT NULL AND ts >= ?", (start,)):
+    for r in conn.execute("SELECT source, correct, ts FROM records WHERE user_id = ? AND seen_only = 0 AND correct IS NOT NULL AND ts >= ?", (conn.user_id, start)):
         day = clock.day_of(r["ts"])
         if day in rows:
             slot = rows[day]["ox" if r["source"] == "ox" else "quiz"]

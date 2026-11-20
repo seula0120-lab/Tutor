@@ -58,11 +58,13 @@ def test_toc_page_and_index_link_over_http(tmp_path, conn):
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
+    from conftest import login_opener
+    opener = login_opener(base, db)
     try:
-        toc_page = urllib.request.urlopen(base + "/toc").read().decode()
+        toc_page = opener.open(base + "/toc").read().decode()
         assert "문제 목차" in toc_page and "renderCard" in toc_page and "/static/quizcard.js" in toc_page
-        assert 'href="/toc"' in urllib.request.urlopen(base + "/").read().decode()
-        data = json.loads(urllib.request.urlopen(base + "/api/toc").read())
+        assert 'href="/toc"' in opener.open(base + "/").read().decode()
+        data = json.loads(opener.open(base + "/api/toc").read())
         assert data["toc"][0]["subject"] == "재무회계"
     finally:
         server.shutdown()

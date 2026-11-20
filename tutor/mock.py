@@ -84,15 +84,15 @@ def grade(conn, ids, answers, *, now=None):
     score = sum(v["score"] for v in by_subject.values())
     max_score = sum(v["max"] for v in by_subject.values())
     with conn:
-        conn.execute("INSERT INTO mock_results(taken_at, score, max_score, by_subject, wrong_ids) VALUES (?,?,?,?,?)",
-                     (now, score, max_score, json.dumps(by_subject, ensure_ascii=False),
+        conn.execute("INSERT INTO mock_results(user_id, taken_at, score, max_score, by_subject, wrong_ids) VALUES (?,?,?,?,?,?)",
+                     (conn.user_id, now, score, max_score, json.dumps(by_subject, ensure_ascii=False),
                       json.dumps([w["id"] for w in wrong])))
     return {"score": score, "max_score": max_score, "by_subject": by_subject, "wrong": wrong, "history": history(conn)}
 
 
 def history(conn):
     """지난 모의고사 점수 추이: 오래된 순(표의 위가 첫 시험). 각 행에 직전 시험과의 점수 차이를 붙인다."""
-    rows = conn.execute("SELECT * FROM mock_results ORDER BY id").fetchall()
+    rows = conn.execute("SELECT * FROM mock_results WHERE user_id = ? ORDER BY id", (conn.user_id,)).fetchall()
     result, previous = [], None
     for n, r in enumerate(rows, 1):
         result.append({"n": n, "taken_at": r["taken_at"], "score": r["score"], "max_score": r["max_score"],

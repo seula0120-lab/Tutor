@@ -18,19 +18,19 @@ def add(conn, query, scope="all", now=None):
     query = clean(query)
     now = time.time() if now is None else now
     with conn:
-        conn.execute("""INSERT INTO favorites(query, scope, created_at) VALUES (?,?,?)
-                        ON CONFLICT(query) DO UPDATE SET scope = excluded.scope""", (query, str(scope or "all"), now))
+        conn.execute("""INSERT INTO favorites(user_id, query, scope, created_at) VALUES (?,?,?,?)
+                        ON CONFLICT(user_id, query) DO UPDATE SET scope = excluded.scope""", (conn.user_id, query, str(scope or "all"), now))
     return list_all(conn)
 
 
 def remove(conn, query):
     query = clean(query)
     with conn:
-        conn.execute("DELETE FROM favorites WHERE query = ?", (query,))
+        conn.execute("DELETE FROM favorites WHERE user_id = ? AND query = ?", (conn.user_id, query))
     return list_all(conn)
 
 
 def list_all(conn):
     """최근에 저장한 순."""
-    rows = conn.execute("SELECT query, scope, created_at FROM favorites ORDER BY created_at DESC, id DESC").fetchall()
+    rows = conn.execute("SELECT query, scope, created_at FROM favorites WHERE user_id = ? ORDER BY created_at DESC, id DESC", (conn.user_id,)).fetchall()
     return [{"query": r["query"], "scope": r["scope"], "created_at": r["created_at"]} for r in rows]

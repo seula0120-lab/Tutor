@@ -133,16 +133,18 @@ def test_http_server_serves_page_and_api(tmp_path, conn):
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     base = f"http://127.0.0.1:{server.server_address[1]}"
+    from conftest import login_opener
+    opener = login_opener(base, None)
     try:
-        page = urllib.request.urlopen(base + "/").read().decode("utf-8")
+        page = opener.open(base + "/").read().decode("utf-8")
         assert "문제 분석" in page and "기출 답안" in page and "단어 주석" in page
         req = urllib.request.Request(base + "/api/ask", data=json.dumps({"q": "저가법"}).encode(),
                                      headers={"Content-Type": "application/json"})
-        data = json.loads(urllib.request.urlopen(req).read())
+        data = json.loads(opener.open(req).read())
         assert data["search"]["results"][0]["id"] == "1-1"
         assert data["ai"]["status"] == "no_key"  # 키가 없으면 검색 결과만 쓴다
         with pytest.raises(urllib.error.HTTPError) as err:
-            urllib.request.urlopen(base + "/api/question?round=7&number=7")
+            opener.open(base + "/api/question?round=7&number=7")
         assert err.value.code == 404
     finally:
         server.shutdown()

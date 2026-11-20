@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>로그인 · 회계튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<header class="topbar"><div class="topbar-inner"><span class="brand">회계튜터<small> 전산세무 1급 이론</small></span></div></header>
+<main>
+<form id="loginForm" class="paper login-card">
+  <h2 id="formTitle">로그인</h2>
+  <p id="setupNote" class="small" hidden>처음 실행입니다. 관리자 계정을 만드세요. 이 계정이 지금까지의 풀이 기록을 이어받습니다. 다른 사람 계정은 로그인한 뒤 '계정 관리'에서 만듭니다.</p>
+  <label for="username">아이디</label>
+  <input id="username" name="username" autocomplete="username" autocapitalize="none" required>
+  <div id="nameRow" hidden><label for="name">이름</label><input id="name" name="name" autocomplete="name"></div>
+  <label for="password">비밀번호</label>
+  <input id="password" name="password" type="password" autocomplete="current-password" required>
+  <div id="loginError" class="login-error" role="alert"></div>
+  <button id="loginBtn" type="submit">로그인</button>
+</form>
+</main>
+<script src="/static/quizcard.js"></script>
+<script>
+let setup = false;
+(async () => {
+  const { data } = await api("/api/me");
+  if (data.user) { location.href = "/"; return; }
+  setup = data.needs_setup;
+  if (setup) {
+    $("formTitle").textContent = "관리자 계정 만들기";
+    $("setupNote").hidden = false; $("nameRow").hidden = false;
+    $("loginBtn").textContent = "만들고 시작하기";
+    $("password").autocomplete = "new-password";
+  }
+})();
+$("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const body = { username: $("username").value, password: $("password").value };
+  if (setup) body.name = $("name").value;
+  const { ok, data } = await api(setup ? "/api/setup" : "/api/login", body);
+  if (ok) { location.href = "/"; } else { $("loginError").textContent = data.error || "로그인할 수 없습니다."; }
+});
+</script>
+</body>
+</html>

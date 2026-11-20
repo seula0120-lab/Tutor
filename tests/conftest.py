@@ -50,3 +50,15 @@ def conn(tmp_path):
 def no_real_api_key(monkeypatch):
     """테스트가 실제 API 를 부르지 않도록 키 환경변수를 지운다(키가 필요한 경우는 가짜 클라이언트를 쓴다)."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+def login_opener(base, db_path):
+    """웹 서버 시험용: 관리자 계정을 하나 만들고 로그인한 urllib opener(쿠키 보관)를 돌려준다. 화면·API 는 로그인이 필요하다."""
+    import http.cookiejar
+    import json
+    import urllib.request
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    request = urllib.request.Request(base + "/api/setup", data=json.dumps({"username": "tester", "password": "tester-pass-1"}).encode(),
+                                     headers={"Content-Type": "application/json"})
+    opener.open(request).read()
+    return opener
