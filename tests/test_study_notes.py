@@ -12,7 +12,7 @@ from tutor.db import connect
 from tutor.glossary import load_glossary
 from tutor.summary import collect_sentences, normalize
 
-SUBJECTS = {"재무회계": 12}      # 과목 → DB 단원 수
+SUBJECTS = {"재무회계": 12, "원가회계": 7}      # 과목 → DB 단원 수
 MIN_QUESTIONS_FOR_TERM = 2      # 문제 글에 이만큼(문항 수) 나온 용어만 '많이 나온 핵심 용어'로 센다
 TOP_TERMS = 8
 REQUIRED_TERMS = 6
@@ -180,3 +180,16 @@ def test_fixed_asset_note_covers_depreciation_methods_revaluation_impairment_exc
     body = compact(" ".join(l["text"] for l in study.load_note("재무회계", "유형자산")["concept"]["lines"]))
     for needed in ["정액법", "정률법", "연수합계법", "생산량비례법", "재평가잉여금", "재평가손실", "손상차손환입", "동종", "이종", "자본적지출", "수익적지출"]:
         assert needed in body, needed
+
+
+def test_cost_notes_reach_the_page_with_pitfalls_and_example(db):
+    """화면이 읽는 study.get_note 결과에 원가 노트의 풀이 순서·자주 틀리는 지점·대표 기출(정답 없이)이 들어 있다."""
+    for subject, unit in units(db):
+        if subject != "원가회계":
+            continue
+        out = study.get_note(db, unit)
+        formula = out["note"]["formula"]
+        assert formula["steps"] and 1 <= len(formula["pitfalls"]) <= 2, unit
+        assert formula["example"]["id"] == formula["example_id"] and "answer" not in formula["example"], unit
+        assert out["drafts"] == ["concept", "practice", "formula"], unit
+        assert any("확인 필요" in t for t in out["note"]["practice"]), unit
