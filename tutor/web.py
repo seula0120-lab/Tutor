@@ -5,11 +5,12 @@ dispatch() 는 소켓 없이 (상태코드, 내용) 만 돌려주는 함수라 �
 """
 import argparse
 import json
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import favorites, glossary_review, mock, quiz, records, study
+from . import clock, daily, favorites, glossary_review, mock, ox, quiz, records, review, study
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -26,7 +27,7 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html"}
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
@@ -151,6 +152,28 @@ def api_study_review(conn, params, body):
     return 200, {"reviewed": study.set_review(conn, body.get("unit", ""), body.get("section", ""), bool(body.get("reviewed")))}
 
 
+def api_ox_set(conn, params, body):
+    items = ox.pick(conn, params.get("subject"), params.get("tax"), params.get("unit"), int(params.get("count") or 20))
+    return (200, {"items": items}) if items else (404, {"error": "조건에 맞는 O/X 문장이 없습니다."})
+
+
+def api_ox_answer(conn, params, body):
+    result = ox.answer(conn, body.get("key", ""), body.get("choice", ""))
+    return (404 if "error" in result else 200), result
+
+
+def api_settings_save(conn, params, body):
+    return 200, {"settings": daily.save_settings(conn, body)}
+
+
+def api_test_clock(conn, params, body):
+    """화면 점검용: 시계를 앞당긴다. TUTOR_TEST_CLOCK=1 로 띄운 점검 서버에서만 열린다."""
+    if not clock.test_clock_enabled():
+        return 404, {"error": "없는 주소입니다."}
+    clock.set_offset(int(body.get("days", 0)))
+    return 200, {"offset": clock.offset(), "date": clock.iso(clock.today())}
+
+
 def api_glossary_review_save(conn, params, body):
     """용어 하나의 검토 상태·메모·수정 제안을 저장한다(사전 원본은 바꾸지 않는다)."""
     glossary_review.save_review(conn, body.get("term", ""), body.get("status", ""), body.get("memo") or "",
@@ -183,6 +206,13 @@ ROUTES = {
     ("GET", "/api/study/changes"): lambda conn, params, body: (200, study.changes_overview(conn)),
     ("POST", "/api/study/progress"): api_study_progress,
     ("POST", "/api/study/review"): api_study_review,
+    ("GET", "/api/ox/set"): api_ox_set,
+    ("GET", "/api/ox/stats"): lambda conn, params, body: (200, ox.stats(conn)),
+    ("POST", "/api/ox/answer"): api_ox_answer,
+    ("GET", "/api/review"): lambda conn, params, body: (200, review.summary(conn)),
+    ("GET", "/api/today"): lambda conn, params, body: (200, daily.today_card(conn)),
+    ("POST", "/api/settings"): api_settings_save,
+    ("POST", "/api/test/clock"): api_test_clock,
     ("GET", "/api/glossary_review"): lambda conn, params, body: (200, {"rows": glossary_review.list_rows(conn)}),
     ("POST", "/api/glossary_review"): api_glossary_review_save,
     ("POST", "/api/ask"): lambda conn, params, body: api_ask(conn, body),
@@ -260,12 +290,22 @@ def startup_sync():
         conn.close()
 
 
+def warm_up():
+    """O/X 문장 은행은 처음 만들 때 몇 초 걸려서, 서버를 켜면 미리 만들어 둔다."""
+    conn = connect()
+    try:
+        ox.pool(conn)
+    finally:
+        conn.close()
+
+
 def main():
     """서버를 켠다(시작할 때 새 회차를 한 번 반영)."""
     parser = argparse.ArgumentParser(description="전산세무 1급 이론 튜터 (로컬 웹)")
     parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
     startup_sync()
+    threading.Thread(target=warm_up, daemon=True).start()
     server = ThreadingHTTPServer((HOST, args.port), Handler)
     print(f"http://{HOST}:{args.port}/ 에서 실행 중입니다. 끝내려면 Ctrl+C.")
     try:

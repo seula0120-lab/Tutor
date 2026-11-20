@@ -185,7 +185,9 @@ async function showUnit(unit) {
     if (!res.ok) { runBox.replaceChildren(el("div", { className: "notice", textContent: res.data.error })); return; }
     runSession(res.data.ids, runBox, `${data.unit} 5문제`);
   });
-  view.append(section("quiz", "⑦", "이 단원 5문제 풀기", el("div", { className: "small", textContent: "아직 못 맞힌 문항부터 나옵니다. 오답이면 보기가 잠기고 오답노트에 남습니다." }), el("div", { className: "row" }, go), runBox));
+  view.append(section("ox", "⑦", "이 단원 O/X 20개", el("div", { className: "small", textContent: "이 단원 기출의 맞는 문장(O)과 함정 문장(X)을 한 문장씩 판단합니다. 틀린 문장은 복습에 들어갑니다." }),
+    el("div", { className: "row" }, el("a", { id: "unitOxGo", className: "btn", href: "/ox?" + query({ subject: data.subject, tax: data.tax, unit: data.unit, count: 20 }), textContent: "이 단원 O/X 20개" }))));
+  view.append(section("quiz", "⑧", "이 단원 5문제 풀기", el("div", { className: "small", textContent: "아직 못 맞힌 문항부터 나옵니다. 오답이면 보기가 잠기고 오답노트에 남습니다." }), el("div", { className: "row" }, go), runBox));
 
   // ⑧ 체크
   const status = el("div", { className: "small", id: "checkInfo" });
@@ -206,7 +208,7 @@ async function showUnit(unit) {
   }
   paint();
   status.textContent = `표시: ${STATUS_LABEL[current]}`;
-  view.append(section("check", "⑧", "체크", el("div", { className: "row" }, buttons.read, buttons.understood), status));
+  view.append(section("check", "⑨", "체크", el("div", { className: "row" }, buttons.read, buttons.understood), status));
 }
 
 const parts = decodeURIComponent(location.pathname).split("/").filter(Boolean);

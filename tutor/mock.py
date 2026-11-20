@@ -7,9 +7,8 @@
 """
 import json
 import random
-import time
 
-from . import records
+from . import clock, records
 from .quiz import accepted_answers, explanation_of, get_row, public_question
 
 SUBJECTS = ("재무회계", "원가회계", "세무회계")
@@ -70,7 +69,7 @@ def grade(conn, ids, answers, *, now=None):
         rows.append(row)
     by_subject = {s: {"score": 0, "max": 0} for s in SUBJECTS}
     wrong = []
-    now = time.time() if now is None else now
+    now = clock.now() if now is None else now
     for row in rows:
         choice = str(answers.get(row["id"], "") or "").strip()
         correct = choice in accepted_answers(row["answer"])

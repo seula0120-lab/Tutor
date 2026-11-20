@@ -228,3 +228,23 @@ h2 { font-size: 17px; margin: 0 0 var(--s2); }
 .taxflag-gap { margin-top: var(--s2); }
 .change-list li { margin: var(--s2) 0; }
 .change-group h2, .change-group h3 { margin-top: var(--s4); }
+
+/* 오늘의 공부 카드(첫 화면) · O/X 퀴즈 */
+.today-card h2 { margin-top: 0; }
+.today-done { color: var(--ok); font-weight: 800; }
+.today-list { list-style: none; margin: var(--s3) 0 0; padding: 0; }
+.today-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--s2); align-items: center; padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
+.today-row.done .today-label { color: var(--muted); }
+.today-check { font-weight: 800; color: var(--muted); text-align: center; }
+.today-row.done .today-check { color: var(--ok); }
+.today-label { min-width: 0; overflow-wrap: anywhere; }
+.ghost-btn { background: transparent; color: var(--accent); }
+.today-week, .today-settings { margin-top: var(--s3); }
+.today-week table { width: 100%; font-size: 13px; }
+.ox-text { font-size: 18px; line-height: 1.7; }
+.ox-row { gap: var(--s3); margin-top: var(--s3); }
+.ox-btn { flex: 1 1 0; min-height: 56px; font-size: 24px; font-weight: 800; }
+.ox-btn.right { outline: 3px solid var(--ok); }
+.ox-btn.wrong { outline: 3px solid var(--bad); }
+.ox-btn:disabled { opacity: 1; }
+.ox-card .ox-result { margin-top: var(--s2); }

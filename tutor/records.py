@@ -5,14 +5,14 @@
 - 같은 문항에 같은 내용의 기록이 DEDUPE_SECONDS 안에 연달아 오면 한 번만 남긴다(더블 클릭 방지).
 - 오답노트 = 오답 기록이 있고, 그 뒤에 정답 기록이 없는 문항. 다시 풀어 맞히면 빠진다. 확인만 한 기록은 넣지도 빼지도 않는다.
 """
-import time
+from . import clock
 
 DEDUPE_SECONDS = 3.0
 
 
 def save(conn, question_id, choice, correct, *, seen_only=False, source="quiz", now=None):
     """기록 한 줄을 남기고 True, 바로 앞의 같은 기록(더블 클릭)이라 건너뛰면 False 를 돌려준다."""
-    now = time.time() if now is None else now
+    now = clock.now() if now is None else now
     choice = str(choice)
     correct_value = None if seen_only else int(bool(correct))
     last = conn.execute("""SELECT choice, correct, seen_only, source, ts FROM records

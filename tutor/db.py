@@ -63,6 +63,14 @@ CREATE TABLE IF NOT EXISTS study_review (
     updated REAL NOT NULL,
     PRIMARY KEY (unit, section)
 );
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,             -- 오늘의 공부 하루 분량: daily_notes / daily_ox / daily_questions
+    value INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS daily_plan (
+    day   INTEGER PRIMARY KEY,          -- clock 의 일 번호
+    units TEXT NOT NULL                 -- JSON 단원 이름 목록(그날 처음 열 때 정해 하루 동안 고정)
+);
 CREATE TABLE IF NOT EXISTS mock_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     taken_at   REAL NOT NULL,

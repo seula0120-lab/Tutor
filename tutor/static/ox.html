@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>O/X · 복습 · 전산세무 1급 이론</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main id="view"></main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("study");
+const view = $("view");
+const params = new URLSearchParams(location.search);
+const backLink = () => el("a", { id: "backToday", className: "small", href: "/", textContent: "← 오늘의 공부로 돌아가기" });
+const pathText = (x) => [x.subject, x.tax, x.unit].filter(Boolean).join(" › ");
+
+// ------------------------------------------------------------------ O/X 한 문장 카드. onDone({correct, key}) 는 정오가 나온 뒤 부른다.
+function oxCard(item, container, onDone) {
+  container.replaceChildren();
+  container.classList.add("paper", "ox-card");
+  container.append(el("div", { className: "meta", textContent: pathText(item) }),
+    ...(item.old_tax ? [el("div", {}, el("span", { className: "taxflag", textContent: item.tax_label || "세법 개정 확인 필요" }))] : []),
+    el("div", { className: "stem ox-text", textContent: item.text }));
+  const result = el("div", { className: "ox-result" });
+  const buttons = ["O", "X"].map((c) => el("button", { className: "ox-btn ox-" + c.toLowerCase(), textContent: c, ariaLabel: c === "O" ? "맞는 문장(O)" : "틀린 문장(X)" }));
+  buttons.forEach((b, i) => b.addEventListener("click", async () => {
+    buttons.forEach((x) => (x.disabled = true));
+    const { ok, data } = await api("/api/ox/answer", { key: item.key, choice: i === 0 ? "O" : "X" });
+    if (!ok) { result.replaceChildren(el("div", { className: "result-wrong", textContent: data.error })); return; }
+    buttons[i].classList.add(data.correct ? "right" : "wrong");
+    result.replaceChildren(
+      el("div", { className: data.correct ? "result-right" : "result-wrong", textContent: `${data.correct ? "정답입니다." : "오답입니다."} 이 문장은 ${data.truth ? "맞는 문장(O)" : "틀린 문장(X)"}입니다.` }),
+      el("div", { className: "small" }, "출처 ", ...data.sources.slice(0, 5).map((id) => el("span", { className: "src-badge", textContent: id })), data.sources.length > 5 ? ` 외 ${data.sources.length - 5}` : ""),
+      ...(data.explanation ? [el("div", { className: "explain" }, el("b", { textContent: "공식 해설 " }), data.explanation)] : []));
+    onDone({ correct: data.correct, key: item.key, text: item.text, truth: data.truth });
+  }));
+  container.append(el("div", { className: "row ox-row" }, ...buttons), result);
+}
+
+// ------------------------------------------------------------------ O/X 세트 진행기
+function runOx(items, box, title) {
+  const tally = { right: 0, wrong: [] };
+  const body = el("div");
+  box.replaceChildren(el("b", { textContent: title }), body);
+  function step(i) {
+    if (i >= items.length) return finish();
+    const frame = el("div");
+    body.replaceChildren(el("div", { className: "small", id: "oxProgress", textContent: `${i + 1} / ${items.length}` }), frame);
+    oxCard(items[i], frame, (r) => {
+      if (r.correct) tally.right += 1; else tally.wrong.push(r);
+      const next = el("button", { id: "oxNext", textContent: i + 1 < items.length ? "다음 문장" : "결과 보기" });
+      next.addEventListener("click", () => step(i + 1));
+      frame.append(el("div", { className: "row" }, next));
+      next.focus();
+    });
+  }
+  function finish() {
+    body.replaceChildren(el("div", { className: "result-right", id: "oxScore", textContent: `${items.length}문장 중 ${tally.right}문장 맞힘` }),
+      tally.wrong.length ? el("div", { id: "oxWrongList" }, el("h3", { textContent: "틀린 문장" }),
+        el("ul", {}, ...tally.wrong.map((w) => el("li", {}, w.text, " ", el("span", { className: "small", textContent: w.truth ? "(맞는 문장이었음)" : "(틀린 문장이었음)" })))),
+        el("div", { className: "small", textContent: "틀린 문장은 1일 → 3일 → 7일 → 14일 뒤 복습에 들어갑니다." }))
+      : el("div", { className: "small", textContent: "전부 맞혔습니다." }),
+      el("div", { className: "row" }, backLink(), el("a", { className: "btn", href: "/ox", textContent: "다른 O/X 고르기" })));
+  }
+  step(0);
+}
+
+// ------------------------------------------------------------------ 복습 진행기(틀린 기출 문항 + 틀린 O/X 문장)
+function runReview(items, box) {
+  const tally = { right: 0, wrong: [] };
+  const body = el("div");
+  box.replaceChildren(el("b", { textContent: "오늘 복습" }), body);
+  async function step(i) {
+    if (i >= items.length) return finish();
+    const frame = el("div");
+    body.replaceChildren(el("div", { className: "small", id: "reviewProgress", textContent: `${i + 1} / ${items.length}` }), frame);
+    const advance = (right, label) => {
+      if (right) tally.right += 1; else tally.wrong.push(label);
+      const next = el("button", { id: "reviewNext", textContent: i + 1 < items.length ? "다음" : "결과 보기" });
+      next.addEventListener("click", () => step(i + 1));
+      frame.append(el("div", { className: "row" }, next));
+    };
+    const item = items[i];
+    if (item.kind === "ox") { oxCard(item, frame, (r) => advance(r.correct, r.text)); return; }
+    const { ok, data } = await api("/api/question?" + query({ id: item.id }));
+    if (!ok) { frame.append(el("div", { className: "result-wrong", textContent: data.error })); return; }
+    renderCard(data, frame, ({ kind }) => advance(kind === "correct", item.id + " " + item.first_line));
+  }
+  function finish() {
+    body.replaceChildren(el("div", { className: "result-right", id: "reviewScore", textContent: `${items.length}개 중 ${tally.right}개 맞힘` }),
+      el("div", { className: "small", textContent: "맞히면 다음 간격(3일 → 7일 → 14일)으로, 틀리면 1일부터 다시 복습합니다. 14일 단계를 맞히면 복습 완료입니다." }),
+      ...(tally.wrong.length ? [el("ul", { id: "reviewWrongList" }, ...tally.wrong.map((t) => el("li", { textContent: t })))] : []),
+      el("div", { className: "row" }, backLink()));
+  }
+  step(0);
+}
+
+// ------------------------------------------------------------------ 화면
+async function showPicker() {
+  const [stats, rev] = await Promise.all([api("/api/ox/stats"), api("/api/review")]);
+  view.replaceChildren(el("h1", { textContent: "O/X 퀴즈" }),
+    el("div", { className: "sub", textContent: "기출의 맞는 문장(O)과 함정 문장(X)을 한 문장씩 판단합니다. 조합·계산·식별형 문항과 문장이 아닌 보기 조각은 들어 있지 않습니다. 세무 문장은 최근 10회가 먼저 나오고, 옛 회차 문장에는 '세법 개정 확인 필요'가 붙습니다." }));
+  const reviewBox = el("section", { className: "box", id: "reviewBox" }, el("h2", { textContent: "복습" }),
+    el("div", { id: "reviewInfo", textContent: `오늘 복습할 것 ${rev.data.due_count}개 · 기다리는 것 ${rev.data.waiting}개 · 복습 완료 ${rev.data.done}개` }),
+    el("div", { className: "small", textContent: "틀린 기출 문항과 틀린 O/X 문장이 1일 → 3일 → 7일 → 14일 뒤에 다시 나옵니다. 맞히면 다음 간격, 틀리면 1일부터 다시, 14일 단계를 맞히면 복습 완료." }));
+  const startReview = el("button", { id: "reviewStart", textContent: "복습 시작" });
+  startReview.disabled = rev.data.due_count === 0;
+  startReview.addEventListener("click", () => { startReview.disabled = true; startReviewRun(); });
+  reviewBox.append(el("div", { className: "row" }, startReview));
+  view.append(reviewBox);
+
+  const subjects = [...new Set(stats.data.units.map((u) => u.subject))];
+  const subjectSel = el("select", { id: "oxSubject", ariaLabel: "과목" }, el("option", { value: "", textContent: "전체 과목" }), ...subjects.map((s) => el("option", { value: s, textContent: s })));
+  const unitSel = el("select", { id: "oxUnit", ariaLabel: "단원" });
+  const countSel = el("select", { id: "oxCount", ariaLabel: "문장 수" }, ...[10, 20, 30].map((n) => el("option", { value: n, textContent: `${n}개`, selected: n === 20 })));
+  const fillUnits = () => {
+    unitSel.replaceChildren(el("option", { value: "", textContent: "전체 단원" }),
+      ...stats.data.units.filter((u) => !subjectSel.value || u.subject === subjectSel.value).map((u) => Object.assign(el("option", { textContent: `${u.tax ? u.tax + " › " : ""}${u.unit} (O ${u.o} · X ${u.x})` }), { value: u.unit })));
+  };
+  subjectSel.addEventListener("change", fillUnits);
+  fillUnits();
+  const go = el("button", { id: "oxStart", textContent: "시작" });
+  const runBox = el("div", { id: "oxRun" });
+  go.addEventListener("click", () => startOx({ subject: subjectSel.value, unit: unitSel.value, count: countSel.value }, runBox));
+  view.append(el("section", { className: "box", id: "oxPicker" }, el("h2", { textContent: "문장 고르기" }),
+    el("div", { className: "row" }, subjectSel, unitSel, countSel, go), runBox,
+    el("div", { className: "small", id: "oxCounts", textContent: "문장 수: " + stats.data.subjects.map((s) => `${s.subject} O ${s.o} · X ${s.x}`).join(" / ") })));
+}
+
+async function startOx(opts, box) {
+  const { ok, data } = await api("/api/ox/set?" + query(opts));
+  if (!ok) { box.replaceChildren(el("div", { className: "notice", textContent: data.error })); return; }
+  runOx(data.items, box, `${opts.unit || opts.subject || "전체"} O/X ${data.items.length}개`);
+}
+
+async function startReviewRun(box) {
+  const { data } = await api("/api/review");
+  const target = box || $("reviewBox");
+  if (!data.due.length) { target.replaceChildren(el("div", { className: "notice", textContent: "오늘 복습할 것이 없습니다." }), el("div", { className: "row" }, backLink())); return; }
+  const run = el("div", { id: "reviewRun" });
+  target.append(run);
+  runReview(data.due, run);
+}
+
+function showRun(title, build) {
+  const box = el("section", { className: "box", id: "runBox" });
+  view.replaceChildren(el("h1", { textContent: title }), box, el("div", { className: "row" }, backLink()));
+  return build(box);
+}
+
+const mode = params.get("mode");
+if (mode === "review") showRun("복습", (box) => startReviewRun(box));
+else if (mode === "quiz") showRun(`${params.get("unit")} 기출`, async (box) => {
+  const res = await api("/api/quiz_set?" + query({ subject: params.get("subject"), tax: params.get("tax"), unit: params.get("unit"), count: params.get("count") || 5 }));
+  if (!res.ok) { box.replaceChildren(el("div", { className: "notice", textContent: res.data.error })); return; }
+  runSession(res.data.ids, box, `${params.get("unit")} 기출 ${res.data.ids.length}문제`);
+});
+else if (params.get("unit") || params.get("subject")) showRun("O/X 퀴즈", (box) => startOx({ subject: params.get("subject") || "", tax: params.get("tax") || "", unit: params.get("unit") || "", count: params.get("count") || 20 }, box));
+else showPicker();
+</script>
+</body>
+</html>

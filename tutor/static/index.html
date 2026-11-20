@@ -22,6 +22,7 @@
 </div></header>
 <main>
 <div id="ask-panel" class="panel active">
+<section id="today" class="box today-card" aria-label="오늘의 공부"></section>
 <h1>전산세무 1급 이론 튜터</h1>
 <div class="sub">이론 30점 영역 · 기출 문항 검색과 공식 해설 · 로컬(127.0.0.1)에서만 동작 · <a id="glossaryReviewLink" href="/glossary-review">용어 사전 검토</a></div>
 <div>
@@ -427,6 +428,57 @@ async function loadMockHistory(known) {
   }
 }
 document.querySelector('.tab[data-tab="mock"]').addEventListener("click", () => loadMockHistory());
+
+// ------------------------------------------------------------------ 오늘의 공부 카드(첫 화면 맨 위)
+const TASK_HREF = {
+  note: (t) => "/study/" + encodeURIComponent(t.unit),
+  ox: (t) => "/ox?" + query({ subject: t.subject, tax: t.tax, unit: t.unit, count: t.need || 20 }),
+  quiz: (t) => "/ox?" + query({ mode: "quiz", subject: t.subject, tax: t.tax, unit: t.unit, count: t.need || 5 }),
+  review: () => "/ox?mode=review",
+};
+async function loadToday() {
+  const { ok, data } = await api("/api/today");
+  const card = $("today");
+  if (!ok) { card.replaceChildren(); return; }
+  const done = data.tasks.filter((t) => t.done).length;
+  const head = el("h2", {}, "오늘의 공부 ", el("span", { id: "todayStatus", className: data.complete ? "today-done" : "small", textContent: data.complete ? "오늘 완료" : `${done}/${data.tasks.length} 완료` }));
+  const list = el("ul", { className: "today-list", id: "todayList" });
+  for (const t of data.tasks) {
+    const row = el("li", { className: "today-row" + (t.done ? " done" : "") });
+    row.dataset.task = t.key;
+    const go = el("a", { className: t.done ? "btn ghost-btn" : "btn", href: TASK_HREF[t.kind](t), textContent: t.kind === "review" ? (t.done ? "복습 열기" : "바로 시작") : t.kind === "note" ? "노트 열기" : "시작" });
+    row.append(el("span", { className: "today-check", ariaLabel: t.done ? "완료" : "아직", textContent: t.done ? "✔" : "○" }), el("span", { className: "today-label" }, el("b", { textContent: t.label + " " }), t.detail), go);
+    list.append(row);
+  }
+  const pct = (x) => (x.rate === null ? "-" : Math.round(x.rate * 100) + "%");
+  const bars = data.week.map((d) => el("tr", {}, el("td", { textContent: d.date.slice(5) }),
+    el("td", { className: "num", textContent: d.ox.n ? `${pct(d.ox)} (${d.ox.right}/${d.ox.n})` : "-" }),
+    el("td", { className: "num", textContent: d.quiz.n ? `${pct(d.quiz)} (${d.quiz.right}/${d.quiz.n})` : "-" })));
+  const week = el("details", { className: "today-week" }, el("summary", { textContent: "지난 7일 기록" }),
+    el("table", { id: "weekTable" }, el("thead", {}, el("tr", {}, el("th", { textContent: "날짜" }), el("th", { textContent: "O/X 정답률" }), el("th", { textContent: "기출 정답률" }))), el("tbody", {}, ...bars)));
+  const settings = el("details", { className: "today-settings" }, el("summary", { textContent: "하루 분량 설정" }));
+  const inputs = {};
+  const labels = { daily_notes: ["노트 수", 1, 5], daily_ox: ["O/X 개수", 5, 50], daily_questions: ["기출 개수", 1, 30] };
+  const form = el("div", { className: "row" });
+  for (const [key, [label, min, max]] of Object.entries(labels)) {
+    inputs[key] = el("input", { type: "number", id: "set-" + key, min: String(min), max: String(max), value: String(data.settings[key]), ariaLabel: label });
+    form.append(el("label", { className: "small" }, label + " ", inputs[key]));
+  }
+  const save = el("button", { id: "settingsSave", className: "ghost", textContent: "저장" });
+  const msg = el("span", { className: "small", id: "settingsMsg" });
+  save.addEventListener("click", async () => {
+    const res = await api("/api/settings", Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value])));
+    if (!res.ok) { msg.textContent = res.data.error; return; }
+    await loadToday();
+    $("todayMsg").textContent = "하루 분량을 저장했습니다.";
+  });
+  form.append(save, msg);
+  settings.append(form);
+  card.replaceChildren(head,
+    el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 복습 대기 ${data.review.waiting}개 · 복습 완료 ${data.review.done}개 · 오늘 ${data.date}`),
+    list, week, settings, el("div", { className: "small", id: "todayMsg" }));
+}
+loadToday();
 
 loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); renderRecent(); loadFavorites();
 function tabFromHash() { if (document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`)) showTab(location.hash.slice(1)); }   // 다른 화면의 탭 링크(/#answers 등)

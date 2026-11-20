@@ -5,9 +5,9 @@
 진도(읽음·이해함)와 AI 초안 '검토 완료' 표시는 서버 DB(study_progress, study_review)에 저장한다.
 """
 import json
-import time
 from pathlib import Path
 
+from . import clock
 from .analysis import unit_profile
 from .glossary import load_glossary
 from .quiz import public_question
@@ -156,7 +156,7 @@ def save_progress(conn, unit, status):
         raise ValueError("진도 값이 올바르지 않습니다.")
     with conn:
         conn.execute("INSERT INTO study_progress(unit, status, updated) VALUES (?,?,?) "
-                     "ON CONFLICT(unit) DO UPDATE SET status=excluded.status, updated=excluded.updated", (unit, status, time.time()))
+                     "ON CONFLICT(unit) DO UPDATE SET status=excluded.status, updated=excluded.updated", (unit, status, clock.now()))
     return status
 
 
@@ -167,7 +167,7 @@ def set_review(conn, unit, section, reviewed):
         raise ValueError("검토할 수 없는 칸입니다.")
     with conn:
         if reviewed:
-            conn.execute("INSERT OR REPLACE INTO study_review(unit, section, updated) VALUES (?,?,?)", (unit, section, time.time()))
+            conn.execute("INSERT OR REPLACE INTO study_review(unit, section, updated) VALUES (?,?,?)", (unit, section, clock.now()))
         else:
             conn.execute("DELETE FROM study_review WHERE unit = ? AND section = ?", (unit, section))
     return sorted(reviewed_sections(conn, unit))
