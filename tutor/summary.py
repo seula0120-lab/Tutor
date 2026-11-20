@@ -153,12 +153,9 @@ def coverage(rows):
             "latest_round": rounds[0] if rounds else None, "units": units.most_common(3)}
 
 
-def build_summary(conn, results, terms):
-    """검색 결과(점수 포함)와 질문 핵심어(terms, 동의어 확장 포함) → 요약 카드 dict.
-
-    {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·식별형·판별불가·전항 정답 처리 목록), "related_ids"(관련 기출 전부), "tax_notice"(카드 전체 안내 또는 None)}
-    """
-    rows = [conn.execute("SELECT * FROM questions WHERE id = ?", (i,)).fetchone() for i in (r["id"] for r in related_results(results))]
+def collect_sentences(rows):
+    """문항 행들에서 (맞는 문장, 함정 문장, 제외 문항) 을 모은다. 문장은 (글, 출처 id, 회차, 세무 여부) 튜플.
+    조합·계산·식별형·판별불가·전항 정답 문항은 문장으로 쓰지 않고 제외 목록에 넣는다. 요약 카드와 공부 노트가 함께 쓴다."""
     right, traps, excluded = [], [], []
     for row in rows:
         choices = json.loads(row["choices"])
@@ -173,6 +170,16 @@ def build_summary(conn, results, terms):
         good, bad = split_sentences(row, kind)
         right += [(s, row["id"], row["round"], is_tax) for s in good]
         traps += [(s, row["id"], row["round"], is_tax) for s in bad]
+    return right, traps, excluded
+
+
+def build_summary(conn, results, terms):
+    """검색 결과(점수 포함)와 질문 핵심어(terms, 동의어 확장 포함) → 요약 카드 dict.
+
+    {"coverage", "right"(맞는 문장), "traps"(함정), "excluded"(조합·계산·식별형·판별불가·전항 정답 처리 목록), "related_ids"(관련 기출 전부), "tax_notice"(카드 전체 안내 또는 None)}
+    """
+    rows = [conn.execute("SELECT * FROM questions WHERE id = ?", (i,)).fetchone() for i in (r["id"] for r in related_results(results))]
+    right, traps, excluded = collect_sentences(rows)
     has_tax = any(r["subject"] == TAX_SUBJECT for r in rows)
     latest_tax = max((r["round"] for r in rows if r["subject"] == TAX_SUBJECT), default=None)
     return {

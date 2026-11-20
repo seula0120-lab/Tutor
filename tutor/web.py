@@ -7,9 +7,9 @@ import argparse
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
-from . import favorites, glossary_review, mock, quiz, records
+from . import favorites, glossary_review, mock, quiz, records, study
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -26,7 +26,7 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html"}
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
 
 
@@ -139,6 +139,18 @@ def api_reveal(conn, params, body):
     return 200, result
 
 
+def api_study_note(conn, params, body):
+    return 200, study.get_note(conn, params.get("unit", ""))
+
+
+def api_study_progress(conn, params, body):
+    return 200, {"status": study.save_progress(conn, body.get("unit", ""), body.get("status", "")), "cards": study.curriculum(conn)}
+
+
+def api_study_review(conn, params, body):
+    return 200, {"reviewed": study.set_review(conn, body.get("unit", ""), body.get("section", ""), bool(body.get("reviewed")))}
+
+
 def api_glossary_review_save(conn, params, body):
     """용어 하나의 검토 상태·메모·수정 제안을 저장한다(사전 원본은 바꾸지 않는다)."""
     glossary_review.save_review(conn, body.get("term", ""), body.get("status", ""), body.get("memo") or "",
@@ -166,6 +178,10 @@ ROUTES = {
     ("POST", "/api/favorites"): lambda conn, params, body: (200, {"favorites": favorites.add(conn, body.get("q"), body.get("scope", "all"))}),
     ("POST", "/api/favorites/delete"): lambda conn, params, body: (200, {"favorites": favorites.remove(conn, body.get("q"))}),
     ("POST", "/api/mock/submit"): lambda conn, params, body: (200, mock.grade(conn, body.get("ids") or [], body.get("answers") or {})),
+    ("GET", "/api/study"): lambda conn, params, body: (200, {"cards": study.curriculum(conn), "roadmap": study.roadmap(conn)}),
+    ("GET", "/api/study/note"): api_study_note,
+    ("POST", "/api/study/progress"): api_study_progress,
+    ("POST", "/api/study/review"): api_study_review,
     ("GET", "/api/glossary_review"): lambda conn, params, body: (200, {"rows": glossary_review.list_rows(conn)}),
     ("POST", "/api/glossary_review"): api_glossary_review_save,
     ("POST", "/api/ask"): lambda conn, params, body: api_ask(conn, body),
@@ -189,8 +205,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         """화면·정적 파일은 그대로 내보내고, 나머지는 dispatch 로 보낸다."""
         url = urlparse(self.path)
-        if url.path in PAGES:
-            return self._send_bytes(200, (STATIC_DIR / PAGES[url.path]).read_bytes(), "text/html; charset=utf-8")
+        path = unquote(url.path)
+        if path.startswith("/study/"):                       # /study/<단원>: 같은 화면이 주소의 단원 이름을 읽는다
+            path = "/study"
+        if path in PAGES:
+            return self._send_bytes(200, (STATIC_DIR / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
         if url.path.startswith("/static/fonts/") and url.path.rsplit("/", 1)[1] in FONT_FILES:
             return self._send_bytes(200, (STATIC_DIR / "fonts" / url.path.rsplit("/", 1)[1]).read_bytes(), "font/woff2")
         if url.path in STATIC_FILES:

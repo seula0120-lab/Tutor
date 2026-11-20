@@ -52,6 +52,17 @@ CREATE TABLE IF NOT EXISTS glossary_review (
     proposed_meaning TEXT NOT NULL,     -- 고쳐 쓰자고 제안한 풀이(없으면 '')
     updated          REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS study_progress (
+    unit    TEXT PRIMARY KEY,
+    status  TEXT NOT NULL,              -- '' / read(읽음) / understood(이해함)
+    updated REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS study_review (
+    unit    TEXT NOT NULL,
+    section TEXT NOT NULL,              -- concept / practice / formula: 사람이 '검토 완료' 로 바꾼 AI 초안 칸
+    updated REAL NOT NULL,
+    PRIMARY KEY (unit, section)
+);
 CREATE TABLE IF NOT EXISTS mock_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     taken_at   REAL NOT NULL,

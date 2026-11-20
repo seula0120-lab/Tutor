@@ -1,107 +1,106 @@
-import random
+import json
 
-from tutor import quiz, records
-from tutor.analysis import MIN_SOLVED, study_order
-from tutor.bank import load_bank
-from tutor.db import connect
+import pytest
+
+from tutor import records, study
 from tutor.web import dispatch
-from test_mock import full_round
 
 
-def bank(tmp_path, rounds=8):
-    conn = connect(tmp_path / "st.db")
-    load_bank(conn, [(r, full_round(r)) for r in range(1, rounds + 1)])
-    return conn
+@pytest.fixture
+def notes_dir(tmp_path, monkeypatch):
+    """임시 노트 폴더: 재고자산 노트 하나만 있다(진짜 data/study 는 건드리지 않는다)."""
+    folder = tmp_path / "study" / "재무회계"
+    folder.mkdir(parents=True)
+    (folder / "재고자산.json").write_text(json.dumps({
+        "unit": "재고자산", "subject": "재무회계",
+        "concept": {"lines": [{"text": "예시 개념.", "sources": []}], "terms": ["재고자산", "없는용어"]},
+        "practice": ["일반전표입력 예시."], "formula": {"formulas": ["식"], "steps": ["순서"], "example_id": "1-1"}, "changes": []}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setattr(study, "STUDY_DIR", tmp_path / "study")
+    return tmp_path / "study"
 
 
-def unit_row(order, unit):
-    return next(r for r in order["rows"] if r["unit"] == unit)
+def test_curriculum_has_three_subject_cards_with_units_and_progress(conn, notes_dir):
+    cards = study.curriculum(conn)
+    assert [c["subject"] for c in cards] == ["재무회계", "원가회계", "세무회계"]
+    assert [c["label"] for c in cards] == ["재무회계", "원가관리회계", "세무회계"]
+    finance = cards[0]
+    assert {u["unit"] for u in finance["units"]} == {"재고자산", "자본", "유형자산"}
+    assert finance["total"] == 3 and finance["done"] == 0 and finance["progress"] == 0.0
+    assert {u["unit"]: u["has_note"] for u in finance["units"]} == {"재고자산": True, "자본": False, "유형자산": False}
+    assert set(cards[2]["taxes"]) == {"부가가치세", "소득세", "법인세"}
 
 
-def solve(conn, ids, correct_flags):
-    for qid, ok in zip(ids, correct_flags):
-        records.save(conn, qid, "2" if ok else "1", ok)
+def test_progress_is_saved_and_counted(conn, notes_dir):
+    study.save_progress(conn, "재고자산", "read")
+    study.save_progress(conn, "자본", "understood")
+    finance = study.curriculum(conn)[0]
+    assert finance["done"] == 2 and finance["understood"] == 1 and finance["progress"] == round(2 / 3, 3)
+    study.save_progress(conn, "재고자산", "")                       # 되돌리기
+    assert study.curriculum(conn)[0]["done"] == 1
+    with pytest.raises(ValueError):
+        study.save_progress(conn, "재고자산", "완료")
+    with pytest.raises(ValueError):
+        study.save_progress(conn, "없는단원", "read")
 
 
-def test_expected_loss_formula(tmp_path):
-    conn = bank(tmp_path)
-    # 재고자산(재무 1~5번)에서 서로 다른 문항 6개: 4개 정답·2개 오답 → 정답률 4/6
-    ids = [f"{r}-{n}" for r in (1, 2) for n in (1, 2, 3)]
-    solve(conn, ids, [True, True, True, True, False, False])
-    order = study_order(conn)
-    unit = conn.execute("SELECT unit FROM questions WHERE id = '1-1'").fetchone()["unit"]
-    row = unit_row(order, unit)
-    assert row["solved_questions"] == 6 and row["accuracy"] == round(4 / 6, 3)
-    assert row["expected_loss"] == round(row["points_per_round"] * (1 - 4 / 6), 2)
-    assert row["status"] == "ok"
+def test_note_overview_comes_from_db_and_terms_link_to_glossary(conn, notes_dir):
+    out = study.get_note(conn, "재고자산")
+    assert out["overview"] == {"questions": 1, "rounds": 1, "latest_round": 1, "points_per_round": study.overview(conn, "재무회계", "", "재고자산")["points_per_round"]}
+    terms = {t["term"]: t["meaning"] for t in out["note"]["concept"]["terms"]}
+    assert terms["재고자산"] and terms["없는용어"] == ""            # 사전에 있는 용어는 뜻이 붙고, 없으면 빈 뜻
+    assert out["note"]["formula"]["example"]["id"] == "1-1" and "answer" not in out["note"]["formula"]["example"]
+    assert out["drafts"] == ["concept", "practice", "formula"]
 
 
-def test_unit_with_fewer_than_five_solved_is_insufficient_not_invented(tmp_path):
-    conn = bank(tmp_path)
-    solve(conn, ["1-6", "2-6", "3-6", "4-6"], [False] * 4)               # 4문항 전부 오답이어도 정답률을 만들지 않는다
-    row = unit_row(study_order(conn), conn.execute("SELECT unit FROM questions WHERE id='1-6'").fetchone()["unit"])
-    assert MIN_SOLVED == 5 and row["status"] == "기록 부족"
-    assert row["accuracy"] is None and row["expected_loss"] is None and row["solved_questions"] == 4
+def test_missing_note_file_gives_empty_note_but_still_has_exam_data(conn, notes_dir):
+    out = study.get_note(conn, "자본")
+    assert out["note"] is None and out["overview"]["questions"] == 1
+    assert set(out["sentences"]) == {"right", "traps", "excluded_count"}
 
 
-def test_no_records_means_every_unit_insufficient(tmp_path):
-    order = study_order(bank(tmp_path))
-    assert order["rows"] and all(r["status"] == "기록 부족" and r["accuracy"] is None for r in order["rows"])
+def test_review_badge_can_be_cleared_and_restored(conn, notes_dir):
+    assert study.set_review(conn, "재고자산", "concept", True) == ["concept"]
+    assert study.get_note(conn, "재고자산")["drafts"] == ["practice", "formula"]
+    assert study.set_review(conn, "재고자산", "concept", False) == []
+    with pytest.raises(ValueError):
+        study.set_review(conn, "재고자산", "sentences", True)          # 기출 문장 칸은 AI 초안이 아니다
 
 
-def test_ordering_is_by_loss_with_insufficient_last(tmp_path):
-    conn = bank(tmp_path)
-    finance = [f"{r}-{n}" for r in range(1, 6) for n in (1,)]           # 재무 단원: 5문항 오답 → 정답률 0
-    solve(conn, finance, [False] * 5)
-    cost = [f"{r}-6" for r in range(1, 6)]                               # 원가 단원: 5문항 정답 → 정답률 100%
-    solve(conn, cost, [True] * 5)
-    rows = study_order(conn)["rows"]
-    labels = [r["status"] for r in rows]
-    assert labels[:2] == ["ok", "ok"] and set(labels[2:]) == {"기록 부족"}
-    assert rows[0]["expected_loss"] > rows[1]["expected_loss"] == 0.0
-    assert rows[0]["subject"] == "재무회계"
+def test_unit_sentences_use_summary_logic_and_prefer_recent_rounds(conn):
+    sentences = study.unit_sentences(conn, "재무회계", "", "재고자산")
+    assert set(sentences) == {"right", "traps", "excluded_count"}
+    for key in ("right", "traps"):
+        rounds = [s["latest_round"] for s in sentences[key]]
+        assert rounds == sorted(rounds, reverse=True)
+        assert all(s["sources"] and "-" in s["sources"][0] for s in sentences[key])
 
 
-def test_seen_only_records_do_not_count_as_solved(tmp_path):
-    conn = bank(tmp_path)
-    for r in range(1, 8):
-        records.save(conn, f"{r}-1", "", None, seen_only=True)
-    assert all(r["solved_questions"] == 0 for r in study_order(conn)["rows"])
+def test_sentence_fragments_are_left_out_of_exam_sentences():
+    assert study.is_full_sentence("자기주식은 자본조정으로 처리한다.") and study.is_full_sentence("당기순이익이 해마다 늘어난다")
+    assert not study.is_full_sentence("자산의 과소계상") and not study.is_full_sentence("과대계상 과소계상 과대계상")
+    assert not study.is_full_sentence("(차) 감가상각비 400,000 (대) 감가상각누계액 400,000 원 원 증가다")
 
 
-def test_pick_set_prefers_unsolved_and_is_unique(tmp_path):
-    conn = bank(tmp_path)
-    unit = conn.execute("SELECT unit FROM questions WHERE id='1-1'").fetchone()["unit"]
-    all_ids = [r["id"] for r in conn.execute("SELECT id FROM questions WHERE unit = ?", (unit,))]
-    done = all_ids[:len(all_ids) - 5]
-    for qid in done:
-        records.save(conn, qid, "2", True)
-    picked = quiz.pick_set(conn, unit=unit, count=5, rng=random.Random(0))
-    assert len(picked) == 5 == len(set(picked)) and not set(picked) & set(done)
+def test_roadmap_orders_by_points_times_recent_rate_and_moves_wrong_units_first(conn, notes_dir):
+    rows = study.roadmap(conn)
+    assert {r["unit"] for r in rows} == {u for _, _, u in study.unit_rows(conn)}
+    scores = [r["score"] for r in rows]
+    assert scores == sorted(scores, reverse=True)
+    assert all(r["score"] == round(r["points_per_round"] * r["recent_rate"], 3) for r in rows)
+    last = rows[-1]["unit"]
+    qid = conn.execute("SELECT id FROM questions WHERE unit = ?", (last,)).fetchone()["id"]
+    records.save(conn, qid, "1", 0)                                     # 오답 기록
+    after = study.roadmap(conn)
+    assert after[0]["unit"] == last and after[0]["wrong_open"] == 1
 
 
-def test_study_apis(tmp_path):
-    conn = bank(tmp_path)
-    status, order = dispatch("GET", "/api/study_order", {"scope": "all"}, {}, conn)
-    assert status == 200 and order["min_solved"] == 5
-    row = order["rows"][0]
-    status, got = dispatch("GET", "/api/quiz_set", {"subject": row["subject"], "tax": row["tax"], "unit": row["unit"]}, {}, conn)
-    assert status == 200 and 1 <= len(got["ids"]) <= 5
-    assert dispatch("GET", "/api/quiz_set", {"unit": "없는단원"}, {}, conn)[0] == 404
-
-
-def test_accuracy_uses_only_latest_result_per_question(tmp_path):
-    conn = bank(tmp_path)
-    unit = conn.execute("SELECT unit FROM questions WHERE id = '1-1'").fetchone()["unit"]
-    ids = [f"{r}-1" for r in range(1, 7)]
-    for n, qid in enumerate(ids):                                   # 처음엔 전부 오답
-        records.save(conn, qid, "1", False, now=100.0 + n)
-    for n, qid in enumerate(ids[:3]):                               # 3문항은 나중에 정답 → 마지막 결과 3/6
-        records.save(conn, qid, "2", True, now=200.0 + n)
-    records.save(conn, ids[0], "1", False, now=300.0)               # 첫 문항은 다시 오답 → 마지막 결과가 오답
-    records.save(conn, ids[5], "", None, seen_only=True, now=400.0)  # 확인만 한 기록은 마지막 결과가 되지 않는다
-    row = unit_row(study_order(conn), unit)
-    assert row["solved_questions"] == 6
-    assert row["accuracy"] == round(2 / 6, 3)
-    stats = records.unit_stats(conn)
-    assert sum(v["attempts"] for v in stats.values()) == 6 == sum(v["questions"] for v in stats.values())
+def test_study_routes(conn, notes_dir):
+    status, payload = dispatch("GET", "/api/study", {}, {}, conn)
+    assert status == 200 and len(payload["cards"]) == 3 and payload["roadmap"]
+    status, note = dispatch("GET", "/api/study/note", {"unit": "재고자산"}, {}, conn)
+    assert status == 200 and note["note"]["practice"] == ["일반전표입력 예시."]
+    assert dispatch("GET", "/api/study/note", {"unit": "없는단원"}, {}, conn)[0] == 400
+    status, saved = dispatch("POST", "/api/study/progress", {}, {"unit": "재고자산", "status": "understood"}, conn)
+    assert status == 200 and saved["cards"][0]["understood"] == 1
+    assert dispatch("POST", "/api/study/progress", {}, {"unit": "재고자산", "status": "x"}, conn)[0] == 400
+    assert dispatch("POST", "/api/study/review", {}, {"unit": "재고자산", "section": "formula", "reviewed": True}, conn)[1]["reviewed"] == ["formula"]
