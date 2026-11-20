@@ -12,11 +12,13 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = join(ROOT, "scratch", "screens");
 const DESIGN_SHOTS = join(SHOTS, "design");
 const STUDY_SHOTS = join(SHOTS, "study");
+const OX_SHOTS = join(SHOTS, "ox");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
 mkdirSync(SHOTS, { recursive: true });
 mkdirSync(DESIGN_SHOTS, { recursive: true });
 mkdirSync(STUDY_SHOTS, { recursive: true });
+mkdirSync(OX_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
@@ -91,7 +93,7 @@ async function connectPage(port) {
   const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: 9 }); };
   const emulate = (features) => send("Emulation.setEmulatedMedia", { features });      // 예: [{name:"prefers-color-scheme", value:"dark"}]
   const viewport = (width, height, mobile) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
-  return { evaluate, waitFor, goto, screenshot, shotTo, emulate, key, studyDir: STUDY_SHOTS, viewport, errors };
+  return { evaluate, waitFor, goto, screenshot, shotTo, emulate, key, studyDir: STUDY_SHOTS, oxDir: OX_SHOTS, viewport, errors };
 }
 
 // 128회 1번 같은 문항의 정답 번호(들): 로컬 기출 파일에서 읽는다(화면에는 풀기 전에 정답이 없으므로 점검 스크립트만 안다).
@@ -370,7 +372,7 @@ async function main() {
     await page.evaluate(`[...document.querySelectorAll('.subject-card[data-subject="재무회계"] .unit-link')].find((a) => a.textContent === '재고자산').click(); true`);
     await page.waitFor(`location.pathname.startsWith('/study/') && document.getElementById('sec-check')`, "단원 노트");
     const sections = await page.evaluate(`[...document.querySelectorAll('.study-section')].map((s) => s.dataset.section).join()`);
-    assert(sections === "glance,concept,practice,sentences,formula,changes,quiz,check", "노트 칸 구성: " + sections);
+    assert(sections === "glance,concept,practice,sentences,formula,changes,ox,quiz,check", "노트 칸 구성: " + sections);
     assert(await page.evaluate(`document.querySelectorAll('#sec-glance .stat').length === 4 && document.querySelectorAll('#sec-concept .concept-list li').length >= 5 && document.querySelectorAll('#sec-sentences .src-badge').length > 0`), "한눈에/개념/기출 문장 칸이 비어 있음");
     assert(await page.evaluate(`['concept','practice','formula'].every((k) => document.querySelector('#sec-' + k + ' .draft-badge'))`), "AI 초안 배지 없음");
     await page.evaluate(`document.querySelector('#sec-concept .term-chip').click(); true`);
@@ -474,6 +476,109 @@ async function main() {
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
     assert(files.length === 21, "스크린샷 21장이 아님");
+  });
+
+  // ---- O/X · 간격 복습 · 오늘의 공부. 서버 시계를 /api/test/clock 으로 하루씩 넘긴다(점검 서버만 열려 있음).
+  const setDay = (days) => page.evaluate(`fetch('/api/test/clock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: ${days} }) }).then((r) => r.json())`);
+  const getJson = (path) => page.evaluate(`fetch(${JSON.stringify(path)}).then((r) => r.json())`);
+  const postJson = (path, body) => page.evaluate(`fetch(${JSON.stringify(path)}, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(${JSON.stringify(body)}) }).then((r) => r.json())`);
+  let wrongSentences = [];
+  await scenario("O/X: 노트의 '이 단원 O/X 20개' → 20문장 풀기 → 정오·출처 → 틀린 문장 목록", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/study/" + encodeURIComponent("자본"));
+    await page.waitFor(`document.getElementById('unitOxGo')`, "O/X 버튼");
+    assert((await page.evaluate(`document.getElementById('unitOxGo').textContent`)) === "이 단원 O/X 20개", "버튼 글자");
+    await page.evaluate(`document.getElementById('unitOxGo').click(); true`);
+    await page.waitFor(`location.pathname === '/ox' && document.querySelector('#runBox .ox-btn')`, "O/X 첫 문장");
+    for (let i = 1; i <= 20; i++) {
+      await page.waitFor(`document.getElementById('oxProgress') && document.getElementById('oxProgress').textContent === '${i} / 20'`, `${i}번째 문장`);
+      assert(await page.evaluate(`!document.querySelector('#runBox .ox-result').textContent`), "풀기 전에 정오가 보임");
+      await page.evaluate(`document.querySelector('#runBox .ox-o').click(); true`);                       // 일부러 늘 O: X 문장은 틀리게 된다
+      await page.waitFor(`document.querySelector('#runBox .ox-result .result-right, #runBox .ox-result .result-wrong')`, "정오 표시");
+      assert(await page.evaluate(`document.querySelectorAll('#runBox .ox-result .src-badge').length > 0 && /\\d+-\\d+/.test(document.querySelector('#runBox .ox-result .src-badge').textContent)`), "출처(회차-번호)가 없음");
+      assert(await page.evaluate(`[...document.querySelectorAll('#runBox .ox-btn')].every((b) => b.disabled)`), "정오 뒤에도 버튼이 열려 있음");
+      await page.evaluate(`document.getElementById('oxNext').click(); true`);
+    }
+    await page.waitFor(`document.getElementById('oxScore')`, "결과");
+    const score = await page.evaluate(`document.getElementById('oxScore').textContent`);
+    const right = Number(score.match(/20문장 중 (\d+)문장/)[1]);
+    wrongSentences = await page.evaluate(`[...document.querySelectorAll('#oxWrongList li')].map((li) => li.firstChild.textContent)`);
+    assert(wrongSentences.length === 20 - right && wrongSentences.length >= 5, `틀린 문장 목록이 맞지 않음: ${score} / ${wrongSentences.length}`);
+    const review = await getJson("/api/review");
+    assert(review.due_count === 0 && review.waiting >= wrongSentences.length, "틀린 문장이 복습 대기에 들어가지 않음: " + JSON.stringify([review.due_count, review.waiting]));
+  });
+
+  await scenario("간격 복습: 하루 넘기면 복습 목록에 나타나고, 풀면 오늘의 공부가 '오늘 완료'가 된다", async () => {
+    const day = await setDay(1);
+    assert(day.offset === 1, "시계를 넘기지 못함");
+    await page.goto(base + "/ox");
+    await page.waitFor(`document.getElementById('reviewInfo')`, "복습 칸");
+    const due = await getJson("/api/review");
+    const dueTexts = due.due.filter((d) => d.kind === "ox").map((d) => d.text);
+    assert(wrongSentences.every((t) => dueTexts.includes(t)), "틀린 O/X 문장이 하루 뒤 복습 목록에 없음");
+    assert((await page.evaluate(`document.getElementById('reviewInfo').textContent`)).includes(`오늘 복습할 것 ${due.due_count}개`), "복습 개수 표시가 다름");
+    await page.evaluate(`document.getElementById('reviewStart').click(); true`);
+    await page.waitFor(`document.getElementById('reviewProgress')`, "복습 첫 항목");
+    const total = Number(await page.evaluate(`document.getElementById('reviewProgress').textContent.split(' / ')[1]`));
+    assert(total === due.due_count, "복습 항목 수가 다름");
+    for (let i = 1; i <= total; i++) {
+      await page.waitFor(`document.getElementById('reviewProgress') && document.getElementById('reviewProgress').textContent.startsWith('${i} / ')`, `복습 ${i}번째`);
+      await page.waitFor(`document.querySelector('#reviewRun .ox-btn, #reviewRun .choice')`, "복습 보기");
+      await page.evaluate(`(document.querySelector('#reviewRun .ox-o') || document.querySelector('#reviewRun .choice')).click(); true`);
+      await page.waitFor(`document.getElementById('reviewNext')`, "복습 정오");
+      await page.evaluate(`document.getElementById('reviewNext').click(); true`);
+    }
+    await page.waitFor(`document.getElementById('reviewScore')`, "복습 결과");
+    assert((await getJson("/api/review")).due_count === 0, "복습을 끝냈는데 오늘 복습할 것이 남음");
+
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length === 4`, "오늘의 공부 4줄");
+    assert(await page.evaluate(`document.getElementById('todayStatus').textContent !== '오늘 완료' && document.querySelector('#todayList [data-task="review"]').classList.contains('done')`), "복습만 끝난 상태가 아님");
+    assert(await page.evaluate(`document.getElementById('weekTable').querySelectorAll('tbody tr').length === 7 && /\\d+일/.test(document.getElementById('streakDays').textContent)`), "지난 7일·연속 일수 표시 없음");
+    await page.evaluate(`document.querySelector('.today-settings summary').click(); document.getElementById('set-daily_ox').value = '5'; document.getElementById('set-daily_questions').value = '2'; document.getElementById('settingsSave').click(); true`);
+    await page.waitFor(`document.getElementById('todayMsg').textContent.includes('저장')`, "설정 저장");
+    assert(await page.evaluate(`document.querySelector('#todayList [data-task^="ox:"]').textContent.includes('O/X 5개') && document.querySelector('#todayList [data-task^="quiz:"]').textContent.includes('2문제')`), "바꾼 하루 분량이 카드에 반영되지 않음");
+    const card = await getJson("/api/today");
+    const unit = card.tasks.find((t) => t.kind === "note").unit;
+    const task = (kind) => card.tasks.find((t) => t.kind === kind);
+    await postJson("/api/study/progress", { unit, status: "read" });
+    const set = await getJson("/api/ox/set?" + new URLSearchParams({ unit, count: String(task("ox").need) }));
+    for (const it of set.items) await postJson("/api/ox/answer", { key: it.key, choice: "O" });
+    const ids = (await getJson("/api/quiz_set?" + new URLSearchParams({ unit, count: String(task("quiz").need) }))).ids;
+    for (const id of ids) await postJson("/api/answer", { id, choice: "1" });
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('todayStatus') && document.getElementById('todayStatus').textContent === '오늘 완료'`, "오늘 완료");
+    assert(await page.evaluate(`[...document.querySelectorAll('#todayList .today-row')].every((r) => r.classList.contains('done'))`), "완료 표시가 빠진 줄이 있음");
+    assert(await page.evaluate(`Number(document.getElementById('streakDays').textContent.replace('일', '')) >= 2`), "연속 공부 일수가 2일 이상이어야 함");
+  });
+
+  await scenario("O/X·복습·오늘의 공부 스크린샷 15장(라이트·다크·모바일)이 scratch/screens/ox/ 에 저장된다", async () => {
+    await setDay(2);                                                           // 하루 더: 어제 푼 틀린 문항이 다시 복습에 나오고, 오늘의 공부는 새로 시작
+    const files = [];
+    const shots = {
+      "오늘의공부": async () => { await page.goto(base + "/"); await page.waitFor(`document.querySelectorAll('#todayList .today-row').length === 4`, "카드"); },
+      "OX-고르기": async () => { await page.goto(base + "/ox"); await page.waitFor(`document.getElementById('oxStart')`, "고르기"); },
+      "OX-문장": async () => { await page.goto(base + "/ox?unit=" + encodeURIComponent("자본") + "&count=20"); await page.waitFor(`document.querySelector('#runBox .ox-btn')`, "문장"); },
+      "OX-정오": async () => { await page.goto(base + "/ox?unit=" + encodeURIComponent("자본") + "&count=20"); await page.waitFor(`document.querySelector('#runBox .ox-btn')`, "문장"); await page.evaluate(`document.querySelector('#runBox .ox-x').click(); true`); await page.waitFor(`document.querySelector('#runBox .ox-result .src-badge')`, "정오"); },
+      "복습": async () => { await page.goto(base + "/ox?mode=review"); await page.waitFor(`document.getElementById('reviewProgress')`, "복습"); await page.waitFor(`document.querySelector('#reviewRun .ox-btn, #reviewRun .choice')`, "복습 보기"); },
+    };
+    try {
+      for (const [variant, scheme, width, height, mobile] of [["light", "light", 1100, 900, false], ["dark", "dark", 1100, 900, false], ["mobile", "light", 390, 844, true]]) {
+        await page.viewport(width, height, mobile);
+        await page.emulate([{ name: "prefers-color-scheme", value: scheme }]);
+        for (const [name, setup] of Object.entries(shots)) {
+          await setup();
+          await sleep(300);
+          if ((await page.evaluate(`document.documentElement.scrollWidth - document.documentElement.clientWidth`)) > 0) throw new Error(`${name}-${variant}: 가로 스크롤 생김`);
+          files.push(await page.shotTo(`${name}-${variant}`, page.oxDir));
+        }
+      }
+    } finally {
+      await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+      await page.viewport(1100, 900, false);
+      await setDay(0);                                                         // 뒤의 점검은 실제 오늘 기준
+    }
+    assert(files.length === 15, "스크린샷 15장이 아님");
   });
 
   const designFiles = [];

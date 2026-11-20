@@ -7,6 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.pop("ANTHROPIC_API_KEY", None)
+os.environ["TUTOR_TEST_CLOCK"] = "1"      # 화면 점검이 날짜를 하루씩 넘겨 볼 수 있게 한다(평소 서버는 닫혀 있음)
 os.environ["GLOSSARY_REVIEW_PATH"] = str(Path(__file__).resolve().parent.parent / "scratch" / "glossary_review.json")  # 진짜 파일을 건드리지 않는다
 
 from tutor.bank import load_bank, read_bank_files  # noqa: E402
