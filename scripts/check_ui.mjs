@@ -343,6 +343,11 @@ async function main() {
     const visible = `(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab.active').getBoundingClientRect(); return a.left >= n.left - 1 && a.right <= n.right + 1; })()`;
     await page.waitFor(visible, "현재 탭(단어 주석)이 보이도록 스크롤");
     await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more') || document.querySelector('.tabs').scrollLeft > 0`, "스크롤 후 상태 갱신");
+    await page.waitFor(`document.querySelector('.tabs-wrap').classList.contains('more-left') === (document.querySelector('.tabs').scrollLeft > 2)`, "스크롤하면 왼쪽 그라데이션도 켜짐");
+    assert(await page.evaluate(`document.querySelector('.tabs').scrollLeft > 2 ? getComputedStyle(document.querySelector('.tabs-wrap'), '::before').opacity === '1' : true`), "왼쪽 그라데이션이 보이지 않음");
+    assert(await page.evaluate(`(() => { const brand = document.querySelector('.brand').getBoundingClientRect(), w = document.querySelector('.tabs-wrap').getBoundingClientRect(); return w.left >= brand.right - 1 && getComputedStyle(document.querySelector('.tabs-wrap')).overflowX === 'hidden'; })()`), "탭 줄이 로고 영역을 침범함");
+    await page.evaluate(`document.querySelector('.tabs').scrollLeft = 0; true`);
+    await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more-left')`, "맨 왼쪽에서는 왼쪽 그라데이션이 꺼짐");
     await page.goto(base + "/toc");                                       // 목차 화면: 목차 탭이 활성이고 보여야 한다
     await page.waitFor(`(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab-link.active').getBoundingClientRect(); return a.right <= n.right + 1 && a.left >= n.left - 1; })()`, "목차 탭이 보임");
     await page.goto(base + "/#mock");

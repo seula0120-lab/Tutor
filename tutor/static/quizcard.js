@@ -28,7 +28,7 @@ function renderTopbar(active) {
   return el("header", { className: "topbar" }, el("div", { className: "topbar-inner" },
     el("a", { className: "brand", href: "/", textContent: "회계튜터" }, el("small", { textContent: " 전산세무 1급 이론" })), el("div", { className: "tabs-wrap" }, el("nav", { className: "tabs", ariaLabel: "화면 이동" }, ...links))));
 }
-// 탭 줄이 가로로 넘칠 때: 현재 탭을 보이는 가운데로 스크롤하고, 오른쪽에 더 있으면 가장자리를 옅게 가린다(.more).
+// 탭 줄이 가로로 넘칠 때: 현재 탭을 보이는 가운데로 스크롤하고, 양쪽에 더 있으면 가장자리를 옅게 가린다(.more, .more-left).
 function scrollTabIntoView(nav) {
   const active = nav && nav.querySelector(".active");
   if (!active) return;
@@ -37,7 +37,10 @@ function scrollTabIntoView(nav) {
 }
 function watchTabOverflow(nav) {
   const wrap = nav.parentElement;
-  const update = () => wrap.classList.toggle("more", nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+  const update = () => {
+    wrap.classList.toggle("more", nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2);
+    wrap.classList.toggle("more-left", nav.scrollLeft > 2);          // 왼쪽에 가려진 탭이 있을 때
+  };
   nav.addEventListener("scroll", update, { passive: true });
   addEventListener("resize", update);
   update();

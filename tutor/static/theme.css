@@ -73,9 +73,10 @@ code { font-size: 13px; background: var(--accent-soft); border-radius: var(--s1)
 .topbar-inner { max-width: 960px; margin: 0 auto; padding: var(--s2) var(--s4); display: flex; align-items: center; gap: var(--s4); }
 .brand { font-weight: 800; font-size: 16px; white-space: nowrap; color: var(--text); text-decoration: none; }
 .brand small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: var(--s1); }
-.tabs-wrap { position: relative; flex: 1; min-width: 0; }
+.tabs-wrap { position: relative; flex: 1; min-width: 0; overflow: hidden; }      /* 탭이 로고 영역으로 넘어가지 않게 자른다 */
 .tabs-wrap::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 32px; background: linear-gradient(to right, transparent, var(--surface)); pointer-events: none; opacity: 0; }
-.tabs-wrap.more::after { opacity: 1; }      /* 오른쪽에 아직 더 있다는 표시(끝까지 밀면 사라짐) */
+.tabs-wrap::before { content: ""; position: absolute; top: 0; left: 0; bottom: 0; width: 32px; z-index: 1; background: linear-gradient(to left, transparent, var(--surface)); pointer-events: none; opacity: 0; }
+.tabs-wrap.more::after, .tabs-wrap.more-left::before { opacity: 1; }      /* 오른쪽에 아직 더 있다는 표시(끝까지 밀면 사라짐) */
 .tabs { position: relative; display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; min-width: 0; padding: var(--s1) 0; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab, .tab-link { flex: none; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); padding: var(--s1) var(--s4); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
