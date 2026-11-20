@@ -534,6 +534,7 @@ async function main() {
     await page.goto(base + "/");
     await page.waitFor(`document.querySelectorAll('#todayList .today-row').length === 4`, "오늘의 공부 4줄");
     assert(await page.evaluate(`document.getElementById('todayStatus').textContent !== '오늘 완료' && document.querySelector('#todayList [data-task="review"]').classList.contains('done')`), "복습만 끝난 상태가 아님");
+    assert((await page.evaluate(`document.getElementById('todayMeta').textContent`)).includes("예정된 복습") && (await page.evaluate(`document.getElementById('todayMeta').textContent`)).includes("아직 날짜 안 됨"), "예정된 복습 표시 없음");
     assert(await page.evaluate(`document.getElementById('weekTable').querySelectorAll('tbody tr').length === 7 && /\\d+일/.test(document.getElementById('streakDays').textContent)`), "지난 7일·연속 일수 표시 없음");
     await page.evaluate(`document.querySelector('.today-settings summary').click(); document.getElementById('set-daily_ox').value = '5'; document.getElementById('set-daily_questions').value = '2'; document.getElementById('settingsSave').click(); true`);
     await page.waitFor(`document.getElementById('todayMsg').textContent.includes('저장')`, "설정 저장");

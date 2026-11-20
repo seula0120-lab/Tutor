@@ -8,11 +8,12 @@
 풀이는 records 에 question_id='ox:<문장 키>', source='ox' 로 남긴다(오답노트·간격 복습과 같은 기록).
 """
 import hashlib
-import json
 import random
+import re
 
 from . import records
 from .notice import tax_notice
+from .question_type import NEGATIVE_STEM, POSITIVE_STEM, stem_of
 from .quiz import NO_EXPLANATION, explanation_of, get_row
 from .search import LATEST_ROUNDS
 from .study import is_full_sentence
@@ -22,6 +23,52 @@ TAX_SUBJECT = "세무회계"
 PREFIX = "ox:"
 OLD_TAX_LABEL = "세법 개정 확인 필요"
 _cache = {}
+
+# ---- 맥락: 보기 문장은 문항 물음·자료와 함께 읽어야 뜻이 통하는 경우가 있다.
+DATA_CUE = re.compile(r"다음\s*(의\s*)?(자료|내용|사항|상황|거래|표)|다음과\s*같(은|을|이|다)|아래|자료")
+GENERIC_WORDS = {"다음", "경우", "대한", "설명", "관련", "해당", "사항", "내용", "방법", "처리", "회계", "자료", "처리한다", "때문", "그러나", "따라서"}
+PARTICLES = ("으로", "에서", "에게", "까지", "부터", "은", "는", "이", "가", "을", "를", "의", "와", "과", "로", "에", "도")
+CASE_STEM = re.compile(r"영향을\s*미치(지\s*(않|아니))?는\s*(것|거래|경우|항목|사건|사항)|(거래|사례|항목|사건)(는|은)\s*(무엇|어느)|이에\s*해당(하지\s*(않|아니)|하는)")
+# 위 물음은 보기가 문장이 아니라 거래·사례를 늘어놓는 것이라 보기 하나만으로는 O/X 가 안 된다.
+STEM_LIMIT = 300
+
+
+def display_stem(question):
+    """문제의 물음에서 정답이 드러나는 '옳지 않은 것은?' 부분을 지운 글. 지울 부분이 없으면 물음 그대로, 남는 글이 없으면 빈 글."""
+    stem = stem_of(question).strip()
+    starts = [m.start() for pattern in (NEGATIVE_STEM, POSITIVE_STEM) for m in pattern.finditer(stem)]
+    if starts:
+        stem = re.sub(r"\s*(가장|제일)$", "", stem[:max(starts)].rstrip(" ,"))
+        if not stem:
+            return ""
+        stem += " …"
+    return stem if len(stem) <= STEM_LIMIT else stem[:STEM_LIMIT] + "…"
+
+
+def has_data(question):
+    """문제 글에 자료(금액·표·조건)가 제시되어 있는가: 물음 뒤에 글이 더 이어지거나 물음에 '다음 자료' 같은 표현이 있다."""
+    stem = stem_of(question)
+    return bool(question[len(stem):].strip()) or bool(DATA_CUE.search(stem))
+
+
+def depends_on_data(sentence, question):
+    """자료·문항을 같이 봐야 뜻이 통하는 문장인가(일반 규칙). 물음이 '영향을 미치(지 않)는 것' 이면 보기가 사례라서 그렇다. 자료가 제시된 문항에서 문장에 금액·수량(숫자)이 있거나,
+    문장이 말하는 대상(세 글자 이상 낱말)이 물음 뒤의 자료에 그대로 나오면 그렇다고 본다."""
+    if CASE_STEM.search(stem_of(question)):
+        return True
+    if not has_data(question):
+        return False
+    if re.search(r"\d", sentence):
+        return True
+    data = question[len(stem_of(question)):]              # 물음 뒤에 이어진 자료. 물음 안의 낱말(주제어)은 자료가 아니다
+    for word in re.findall(r"[가-힣A-Za-z0-9]{3,}", sentence):
+        for particle in PARTICLES:
+            if word.endswith(particle) and len(word) - len(particle) >= 2:
+                word = word[:-len(particle)]
+                break
+        if word not in GENERIC_WORDS and word in data:
+            return True
+    return False
 
 
 def key_of(text):
@@ -49,7 +96,7 @@ def pool(conn):
     right, traps, _ = collect_sentences(rows)
 
     def groups(entries):
-        return merge_sentences([e for e in entries if is_full_sentence(e[0])])
+        return merge_sentences([e for e in entries if is_full_sentence(e[0]) and not depends_on_data(e[0], by_id[e[1]]["question"])])
     right_groups, trap_groups = groups(right), groups(traps)
     right_keys = {key_of(g["text"]) for g in right_groups}
     trap_keys = {key_of(g["text"]) for g in trap_groups}
@@ -65,14 +112,14 @@ def pool(conn):
             old_tax = head["subject"] == TAX_SUBJECT and latest_round <= latest - LATEST_ROUNDS
             items[key] = {"key": key, "text": g["text"], "truth": truth, "sources": g["sources"], "count": g["count"],
                           "latest_round": latest_round, "subject": head["subject"], "tax": head["tax"], "unit": head["unit"],
-                          "old_tax": old_tax, "tax_label": (g["tax_notice"] or OLD_TAX_LABEL) if old_tax else ""}
+                          "stem": display_stem(head["question"]), "old_tax": old_tax, "tax_label": (g["tax_notice"] or OLD_TAX_LABEL) if old_tax else ""}
     _cache.update(signature=signature, items=items)
     return items
 
 
 def public_item(item):
     """화면에 줄 문장: 정답(truth)과 해설은 뺀다."""
-    return {k: item[k] for k in ("key", "text", "subject", "tax", "unit", "latest_round", "old_tax", "tax_label")}
+    return {k: item[k] for k in ("key", "text", "stem", "subject", "tax", "unit", "latest_round", "old_tax", "tax_label")}
 
 
 def stats(conn):

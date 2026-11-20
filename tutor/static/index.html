@@ -475,7 +475,7 @@ async function loadToday() {
   form.append(save, msg);
   settings.append(form);
   card.replaceChildren(head,
-    el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 복습 대기 ${data.review.waiting}개 · 복습 완료 ${data.review.done}개 · 오늘 ${data.date}`),
+    el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date}`),
     list, week, settings, el("div", { className: "small", id: "todayMsg" }));
 }
 loadToday();

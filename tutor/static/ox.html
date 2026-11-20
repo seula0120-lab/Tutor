@@ -22,6 +22,7 @@ function oxCard(item, container, onDone) {
   container.replaceChildren();
   container.classList.add("paper", "ox-card");
   container.append(el("div", { className: "meta", textContent: pathText(item) }),
+    ...(item.stem ? [el("div", { className: "small ox-stem", textContent: "문제: " + item.stem })] : []),
     ...(item.old_tax ? [el("div", {}, el("span", { className: "taxflag", textContent: item.tax_label || "세법 개정 확인 필요" }))] : []),
     el("div", { className: "stem ox-text", textContent: item.text }));
   const result = el("div", { className: "ox-result" });
@@ -104,7 +105,7 @@ async function showPicker() {
   view.replaceChildren(el("h1", { textContent: "O/X 퀴즈" }),
     el("div", { className: "sub", textContent: "기출의 맞는 문장(O)과 함정 문장(X)을 한 문장씩 판단합니다. 조합·계산·식별형 문항과 문장이 아닌 보기 조각은 들어 있지 않습니다. 세무 문장은 최근 10회가 먼저 나오고, 옛 회차 문장에는 '세법 개정 확인 필요'가 붙습니다." }));
   const reviewBox = el("section", { className: "box", id: "reviewBox" }, el("h2", { textContent: "복습" }),
-    el("div", { id: "reviewInfo", textContent: `오늘 복습할 것 ${rev.data.due_count}개 · 기다리는 것 ${rev.data.waiting}개 · 복습 완료 ${rev.data.done}개` }),
+    el("div", { id: "reviewInfo", textContent: `오늘 복습할 것 ${rev.data.due_count}개 · 예정된 복습 ${rev.data.waiting}개(아직 날짜 안 됨) · 복습 완료 ${rev.data.done}개` }),
     el("div", { className: "small", textContent: "틀린 기출 문항과 틀린 O/X 문장이 1일 → 3일 → 7일 → 14일 뒤에 다시 나옵니다. 맞히면 다음 간격, 틀리면 1일부터 다시, 14일 단계를 맞히면 복습 완료." }));
   const startReview = el("button", { id: "reviewStart", textContent: "복습 시작" });
   startReview.disabled = rev.data.due_count === 0;

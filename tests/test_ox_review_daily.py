@@ -1,4 +1,6 @@
 """O/X 퀴즈 · 간격 복습 · 오늘의 공부: 문장 고르기 규칙, 채점·기록, 복습 간격, 날짜 바꿔 끼우기, 오늘 완료."""
+import json
+
 import pytest
 
 from conftest import item
@@ -103,6 +105,48 @@ def test_stats_counts_o_and_x_per_subject(db):
     stats = ox.stats(db)
     assert {s["subject"] for s in stats["subjects"]} == {"재무회계", "세무회계"}
     assert all(s["total"] == s["o"] + s["x"] for s in stats["subjects"])
+
+
+# ---------------------------------------------------------------- 맥락: 물음 보이기·자료 의존 문장 빼기
+Q_82_8 = ("종합원가계산 하에서, 평균법에 의한 경우 당기제품 제조원가가 다음과 같을 때 선입선출법을 적용할 경우와 비교한 설명으로 올바른 것은? "
+          "ㆍ기초재공품 : 0개 ㆍ당기착수량 : 10,000개 ㆍ완성품 : 7,000개 ㆍ기말재공품 : 3,000개(완성도 50%) ㆍ당기제품제조원가 : 1,050,000원")
+Q_81_1 = ("2018년에 개업한 ㈜세무의 기말재고자산 평가와 관련하여 다음 자료로 인하여 재무제표에 미치는 영향에 대한 설명으로 틀린 것은? "
+          "1. 기말재고자산 수량을 검토한 결과 감모 손실이 1,000,000원 발생하였으며 감모 손실의 90%는 정상적인 것이다.")
+
+
+def test_display_stem_hides_the_verdict_but_keeps_the_topic():
+    for question, expected in (("다음 중 현금흐름표에 대한 설명으로 옳지 않은 것은?", "다음 중 현금흐름표에 대한 설명으로 …"),
+                               ("다음 중 소득세법상 종합소득공제에 대한 설명으로 가장 옳은 것은?", "다음 중 소득세법상 종합소득공제에 대한 설명으로 …"),
+                               ("자기주식의 회계처리에 대한 다음의 설명 중 틀린 것은?", "자기주식의 회계처리에 대한 다음의 설명 중 …")):
+        assert ox.display_stem(question) == expected
+    shown = ox.display_stem(Q_81_1)
+    assert shown.startswith("2018년에 개업한 ㈜세무") and "틀린" not in shown and "1,000,000" not in shown     # 물음까지만, 뒤의 자료는 안 붙는다
+    assert ox.display_stem("다음 중 감가상각에 대한 설명으로 올바른 것은?").count("올바른") == 0
+
+
+def test_sentences_that_need_the_given_data_are_dropped_by_a_general_rule():
+    assert ox.has_data(Q_82_8) and ox.has_data(Q_81_1) and not ox.has_data("다음 중 현금흐름표에 대한 설명으로 옳지 않은 것은?")
+    for sentence in ("당기제품제조원가는 동일하다.", "기말재공품의 완성품환산량은 작아진다.", "가공비 발생액은 800,000원이다."):
+        assert ox.depends_on_data(sentence, Q_82_8), sentence
+    for sentence in ("손익계산서상 당기순이익은 1,000,000원이 감소한다.", "재무상태표상 재고자산가액이 500,000원 감소된다.", "기말재고자산 수량을 검토한 결과는 감모손실에 반영된다."):
+        assert ox.depends_on_data(sentence, Q_81_1), sentence                    # 금액이 있거나 자료에 나온 대상(기말재고자산)을 말한다
+    assert not ox.depends_on_data("당기제품제조원가는 동일하다.", "다음 중 원가에 대한 설명으로 옳은 것은?")       # 자료가 없는 문항이면 그대로 쓴다
+    assert ox.depends_on_data("생산공장에서 사용된 소모품을 과대계상하였다.", "다음 중 제조원가명세서상 당기제품제조원가에 영향을 미치지 않는 거래는 무엇인가?")   # 보기가 사례
+    assert not ox.depends_on_data("정액법은 매년 같은 금액을 상각한다.", Q_82_8)                                 # 자료와 무관한 일반 문장은 남긴다
+
+
+def test_pool_has_no_data_dependent_sentences_and_shows_stem(db):
+    choices = ["재무상태표상 재고자산가액이 500,000원 감소된다.", "손익계산서상 당기순이익은 1,000,000원이 감소한다.",
+               "정액법은 내용연수 동안 매년 같은 금액을 상각하는 방법이다.", "기말재고자산 수량이 늘면 매출원가가 줄어드는 경향이 있다."]
+    db.execute("UPDATE questions SET question = ?, choices = ?, answer = '1' WHERE id = '12-2'", (Q_81_1, json.dumps(choices, ensure_ascii=False)))
+    db.commit()
+    ox._cache.clear()
+    texts = {i["text"] for i in ox.pool(db).values() if "12-2" in i["sources"]}
+    assert texts == {choices[2]}                                               # 숫자가 있거나 자료에 나온 대상(기말재고자산)을 말하는 보기는 빠지고 일반 문장만 남는다
+    item = by_text(db, "영세율 셋째")
+    assert item["stem"] == "다음 중 부가가치세법상 영세율에 대한 설명으로 …"
+    assert ox.public_item(item)["stem"] == item["stem"]
+    assert not any(w in i["stem"] for i in ox.pool(db).values() for w in ("옳지 않은", "틀린 것"))
 
 
 # ---------------------------------------------------------------- 간격 복습
@@ -266,4 +310,6 @@ def test_pages_and_note_button_exist():
     from tutor.web import PAGES
     assert PAGES["/ox"] == "ox.html" and (static / "ox.html").exists()
     assert "이 단원 O/X 20개" in (static / "study.html").read_text(encoding="utf-8")
-    assert 'id="today"' in (static / "index.html").read_text(encoding="utf-8")
+    index = (static / "index.html").read_text(encoding="utf-8")
+    assert 'id="today"' in index and "예정된 복습" in index and "복습 대기" not in index
+    assert "예정된 복습" in (static / "ox.html").read_text(encoding="utf-8")
