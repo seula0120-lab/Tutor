@@ -305,3 +305,40 @@ def test_regenerate_requeues_notes_not_read_in_past_days(db):
     plan.generate(db)
     later = [r["unit"] for d in all_days(db) if d >= today + 3 for r in rows(db, d) if r["kind"] == "note"]
     assert unit not in later
+
+
+def test_split_keeps_total():
+    assert plan.split(20, 3) == [7, 7, 6] and sum(plan.split(20, 3)) == 20
+    assert plan.split(1, 3) == [1, 0, 0] and plan.split(5, 0) == []
+
+
+@pytest.mark.parametrize("notes,ox_n,quiz_n", [(3, 20, 5), (5, 5, 1), (2, 50, 30), (4, 7, 3)])
+def test_daily_totals_never_exceed_settings(db, notes, ox_n, quiz_n):
+    daily.save_settings(db, {"daily_notes": notes, "daily_ox": ox_n, "daily_questions": quiz_n})
+    setup_plan(db, rest_days=[], final_days=0, exam_date=clock.iso(clock.today() + 6))   # 단원보다 날이 모자라게
+    result = plan.generate(db)
+    for d in all_days(db):
+        day = rows(db, d)
+        assert sum(1 for r in day if r["kind"] == "note") <= notes            # 하루 노트 수는 설정값을 넘지 않는다
+        assert sum(r["target"] for r in day if r["kind"] == "ox") <= ox_n
+        assert sum(r["target"] for r in day if r["kind"] == "quiz") <= quiz_n
+    assert result["notes_per_day"] <= notes
+
+
+def test_fewer_days_report_unscheduled_instead_of_adding_units(db):
+    daily.save_settings(db, {"daily_notes": 1, "daily_ox": 20, "daily_questions": 5})
+    noted = [r["unit"] for r in study.roadmap(db) if r["has_note"]]
+    setup_plan(db, rest_days=[], final_days=0, exam_date=clock.iso(clock.today() + 3))   # 공부일 3일 < 단원 수
+    result = plan.generate(db)
+    scheduled = [r["unit"] for d in all_days(db) for r in rows(db, d) if r["kind"] == "note"]
+    assert len(scheduled) == 3 == result["units_scheduled"] and result["notes_per_day"] == 1
+    assert set(result["unscheduled"]) == set(noted) - set(scheduled) and result["unscheduled"]
+
+
+def test_today_card_total_is_split_across_units(db):
+    daily.save_settings(db, {"daily_notes": 3, "daily_ox": 20, "daily_questions": 5})
+    card = daily.today_plan(db)
+    units = {t["unit"] for t in card["tasks"] if t["unit"]}
+    assert len(units) == 3
+    assert sum(t["need"] for t in card["tasks"] if t["kind"] == "ox") <= 20
+    assert sum(t["need"] for t in card["tasks"] if t["kind"] == "quiz") <= 5

@@ -2,7 +2,7 @@
 
 오늘 할 것
 - 복습: 복습일이 된 틀린 문항·문장(review). 남은 것이 없으면 완료.
-- 단원마다(하루 노트 수만큼): ① 노트 읽기 ② O/X ③ 기출. 단원은 복귀 순서(study.roadmap)에서 노트가 있고 아직 '이해함'이 아닌 앞쪽 단원이며,
+- 단원마다(하루 노트 수만큼): ① 노트 읽기 ② O/X ③ 기출. O/X·기출 개수는 하루 전체 목표를 그날 단원들에 나눈 몫이다(plan.split). 단원은 복귀 순서(study.roadmap)에서 노트가 있고 아직 '이해함'이 아닌 앞쪽 단원이며,
   그날 처음 열 때 정해 daily_plan 에 저장해 하루 동안 바뀌지 않는다(중간에 '이해함' 으로 바꿔도 오늘 할 일이 사라지지 않는다).
 - 완료는 기록에서 계산한다(체크 버튼 없음): 노트는 오늘 읽음·이해함으로 표시, O/X 와 기출은 오늘 푼 수가 분량(단원 문항이 적으면 그 수) 이상.
 연속 공부 일수 = 풀이 기록이 있거나 단원 진도를 표시한 날이 이어진 일수(오늘 아직 안 했으면 어제까지 센다).
@@ -126,10 +126,11 @@ def today_plan(conn, today=None):
 
     tasks = [{"key": "review", "kind": "review", "label": "복습", "unit": "", "need": due["due_count"], "have": 0,
               "done": due["due_count"] == 0, "detail": (f"오늘 복습할 문항·문장 {due['due_count']}개" if due["due_count"] else "오늘 복습할 것이 없습니다.")}]
-    for unit in units:
+    ox_share, q_share = plan.split(settings["daily_ox"], len(units)), plan.split(settings["daily_questions"], len(units))
+    for unit, share_ox, share_q in zip(units, ox_share, q_share):          # 하루 분량은 '하루 전체 목표': 오늘 단원들에 나눠 담는다
         subject, tax, _ = info[unit]
-        need_ox = min(settings["daily_ox"], ox_total.get(unit, 0))
-        need_q = min(settings["daily_questions"], q_total.get(unit, 0))
+        need_ox = min(share_ox, ox_total.get(unit, 0))
+        need_q = min(share_q, q_total.get(unit, 0))
         have_ox, have_q = ox_done.get(unit, 0), quiz_done.get(unit, 0)
         tasks += [
             {"key": f"note:{unit}", "kind": "note", "label": "노트", "unit": unit, "subject": subject, "tax": tax, "need": 1, "have": int(unit in noted),

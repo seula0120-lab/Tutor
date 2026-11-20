@@ -5,8 +5,31 @@
 import { spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { inflateSync } from "node:zlib";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+// PNG(8비트 RGB/RGBA, 비인터레이스)를 풀어 {width, height, px(x, y) → [r, g, b]} 로 돌려준다. 화면 조각의 색을 직접 비교하는 검사용.
+function decodePng(buf) {
+  let pos = 8, width = 0, height = 0, channels = 4; const idat = [];
+  while (pos < buf.length) {
+    const len = buf.readUInt32BE(pos), type = buf.toString("latin1", pos + 4, pos + 8), body = buf.subarray(pos + 8, pos + 8 + len);
+    if (type === "IHDR") { width = body.readUInt32BE(0); height = body.readUInt32BE(4); channels = body[9] === 2 ? 3 : 4; }
+    if (type === "IDAT") idat.push(body);
+    pos += 12 + len;
+  }
+  const raw = inflateSync(Buffer.concat(idat)), stride = width * channels, out = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)], line = raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1));
+    for (let i = 0; i < stride; i++) {
+      const a = i >= channels ? out[y * stride + i - channels] : 0, b = y ? out[(y - 1) * stride + i] : 0, c = y && i >= channels ? out[(y - 1) * stride + i - channels] : 0;
+      const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c);
+      const pred = [0, a, b, (a + b) >> 1, pa <= pb && pa <= pc ? a : pb <= pc ? b : c][filter];
+      out[y * stride + i] = (line[i] + pred) & 255;
+    }
+  }
+  return { width, height, px: (x, y) => [out[y * stride + x * channels], out[y * stride + x * channels + 1], out[y * stride + x * channels + 2]] };
+}
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SHOTS = join(ROOT, "scratch", "screens");
@@ -87,6 +110,7 @@ async function connectPage(port) {
     const r = await send("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(SHOTS, `${String(++shot).padStart(2, "0")}-${name}.png`), Buffer.from(r.data, "base64"));
   };
+  const pixels = async (x, y, width, height) => decodePng(Buffer.from((await send("Page.captureScreenshot", { format: "png", clip: { x, y, width, height, scale: 1 } })).data, "base64"));
   const shotTo = async (name, dir = DESIGN_SHOTS) => {              // 디자인 스크린샷: scratch/screens/design/<이름>.png (dir 로 폴더 변경)
     const r = await send("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(dir, `${name}.png`), Buffer.from(r.data, "base64"));
@@ -95,7 +119,7 @@ async function connectPage(port) {
   const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: 9 }); };
   const emulate = (features) => send("Emulation.setEmulatedMedia", { features });      // 예: [{name:"prefers-color-scheme", value:"dark"}]
   const viewport = (width, height, mobile) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
-  return { evaluate, waitFor, goto, screenshot, shotTo, emulate, key, studyDir: STUDY_SHOTS, oxDir: OX_SHOTS, viewport, errors };
+  return { evaluate, waitFor, goto, screenshot, pixels, shotTo, emulate, key, studyDir: STUDY_SHOTS, oxDir: OX_SHOTS, viewport, errors };
 }
 
 // 128회 1번 같은 문항의 정답 번호(들): 로컬 기출 파일에서 읽는다(화면에는 풀기 전에 정답이 없으므로 점검 스크립트만 안다).
@@ -352,13 +376,13 @@ async function main() {
     const more = () => page.evaluate(`document.querySelector('.tabs-wrap').classList.contains('more')`);
     await page.waitFor(`document.querySelector('.tabs').scrollWidth > document.querySelector('.tabs').clientWidth`, "탭 줄이 가로로 넘침");
     assert(await more(), "처음에는 오른쪽에 더 있다는 그라데이션이 켜져야 함");
-    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tabs-wrap'), '::after').backgroundImage`)).includes("linear-gradient"), "그라데이션 없음");
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tabs')).webkitMaskImage`)).includes("linear-gradient"), "오른쪽 가장자리 페이드(마스크) 없음");
     await tab("words");
     const visible = `(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab.active').getBoundingClientRect(); return a.left >= n.left - 1 && a.right <= n.right + 1; })()`;
     await page.waitFor(visible, "현재 탭(단어 주석)이 보이도록 스크롤");
     await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more') || document.querySelector('.tabs').scrollLeft > 0`, "스크롤 후 상태 갱신");
     await page.waitFor(`document.querySelector('.tabs-wrap').classList.contains('more-left') === (document.querySelector('.tabs').scrollLeft > 2)`, "스크롤하면 왼쪽 그라데이션도 켜짐");
-    assert(await page.evaluate(`document.querySelector('.tabs').scrollLeft > 2 ? getComputedStyle(document.querySelector('.tabs-wrap'), '::before').opacity === '1' : true`), "왼쪽 그라데이션이 보이지 않음");
+    assert(await page.evaluate(`document.querySelector('.tabs').scrollLeft > 2 ? getComputedStyle(document.querySelector('.tabs')).webkitMaskImage.includes('linear-gradient') : true`), "왼쪽 가장자리 페이드(마스크)가 없음");
     assert(await page.evaluate(`(() => { const brand = document.querySelector('.brand').getBoundingClientRect(), w = document.querySelector('.tabs-wrap').getBoundingClientRect(); return w.left >= brand.right - 1 && getComputedStyle(document.querySelector('.tabs-wrap')).overflowX === 'hidden'; })()`), "탭 줄이 로고 영역을 침범함");
     await page.evaluate(`document.querySelector('.tabs').scrollLeft = 0; true`);
     await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more-left')`, "맨 왼쪽에서는 왼쪽 그라데이션이 꺼짐");
@@ -772,6 +796,56 @@ async function main() {
     await logIn("planner", "planner-pass-3");
     await logOut();
     await logIn("admin", "admin-pass-1");
+  });
+
+  // 상단 바 구성(로고·탭 줄·계정 버튼)이 어떻게 바뀌어도 잡는 검사: ① 로고·탭 줄·계정 버튼 영역이 서로 겹치지 않고
+  // ② 탭 줄 안팎의 빈틈(로고~탭 줄, 탭 줄~계정 버튼)과 잘린 가장자리 안쪽 8px 에 글자 조각이 비치지 않는다(화면 조각의 색이 배경과 같다).
+  // 예전 검사는 '탭 줄 왼쪽 >= 로고 오른쪽' 좌표만 봤기 때문에, 탭 줄 안에서 잘려 비치는 글자 조각은 통과했다.
+  await scenario("상단 바: 로고·탭·계정 버튼이 겹치지 않고 잘린 탭 글자 조각이 비치지 않는다(모바일·데스크톱·라이트·다크, 스크롤 위치별)", async () => {
+    const colorDiff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
+    const problems = [];
+    const probe = async (label) => {
+      const g = await page.evaluate(`(() => {
+        const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
+        const nav = document.querySelector('.tabs'), wrap = document.querySelector('.tabs-wrap');
+        return { brand: r(document.querySelector('.topbar .brand')), wrap: r(wrap), user: r(document.querySelector('.topbar .userbox')), bar: r(document.querySelector('.topbar')),
+                 overflow: getComputedStyle(wrap).overflowX, left: nav.scrollLeft > 2, right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2 };
+      })()`);
+      if (g.overflow !== "hidden") problems.push(`${label}: 탭 줄 바깥이 잘리지 않음`);
+      if (g.brand.r > g.wrap.l + 0.5) problems.push(`${label}: 로고와 탭 줄이 겹침`);
+      if (g.user && g.wrap.r > g.user.l + 0.5) problems.push(`${label}: 탭 줄과 계정 버튼이 겹침`);
+      const top = Math.ceil(g.bar.t) + 6, height = Math.max(8, Math.floor(g.bar.b - g.bar.t) - 14);
+      const regions = [["로고~탭 줄 빈틈과 왼쪽 가장자리", g.brand.r + 1, g.wrap.l + (g.left ? 8 : 0)]];
+      if (g.right) regions.push(["탭 줄 오른쪽 가장자리~계정 버튼", g.wrap.r - 8, g.user ? g.user.l - 1 : g.wrap.r]);
+      else if (g.user) regions.push(["탭 줄~계정 버튼 빈틈", g.wrap.r + 1, g.user.l - 1]);
+      for (const [name, from, to] of regions) {
+        const x = Math.ceil(from), width = Math.floor(to) - x;
+        if (width < 2) continue;
+        const img = await page.pixels(x, top, width, height), ref = img.px(0, 0);
+        let worst = 0;
+        for (let yy = 0; yy < img.height; yy++) for (let xx = 0; xx < img.width; xx++) worst = Math.max(worst, colorDiff(img.px(xx, yy), ref));
+        if (worst > 12) problems.push(`${label}: ${name}에 글자 조각이 비침(색 차이 ${worst})`);
+      }
+    };
+    const pages = ["/", "/study", "/toc", "/calendar", "/plan", "/account", "/admin"];
+    const variants = [[390, 844, true, "light", "모바일"], [1100, 900, false, "light", "데스크톱"], [390, 844, true, "dark", "모바일 다크"], [320, 640, true, "light", "아주 좁은 모바일"]];
+    for (const [w, h, mobile, scheme, name] of variants) {
+      await page.viewport(w, h, mobile);
+      await page.emulate([{ name: "prefers-color-scheme", value: scheme }]);
+      for (const path of pages) {
+        await page.goto(base + path);
+        await page.waitFor(`document.querySelector('.topbar .tabs') && document.querySelector('.topbar .userbox')`, "상단 바 계정 버튼");
+        await sleep(500);
+        for (const pos of ["0", "mid", "max"]) {
+          await page.evaluate(`(() => { const n = document.querySelector('.tabs'); n.style.scrollBehavior = 'auto'; n.scrollLeft = ${pos === "0" ? 0 : pos === "mid" ? "(n.scrollWidth - n.clientWidth) / 2" : "n.scrollWidth"}; return true; })()`);
+          await sleep(250);
+          await probe(`${name} ${path} 스크롤 ${pos}`);
+        }
+      }
+    }
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(1100, 900, false);
+    assert(!problems.length, problems.slice(0, 6).join(" | ") + (problems.length > 6 ? ` … 외 ${problems.length - 6}건` : ""));
   });
 
   await scenario("콘솔 오류가 없다", async () => {

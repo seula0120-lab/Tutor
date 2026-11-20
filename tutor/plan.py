@@ -8,7 +8,9 @@
    - 마무리 기간: 복습(하루 max(복습 분량, 20)) + 이틀에 한 번 모의고사 1회, 모의고사가 없는 날은 단원 무관 기출 10문제. 시험 전날은 복습만.
 4. 나머지 공부일에는 복귀 순서(study.roadmap)대로 단원을 나눠 담는다.
    - 노트가 있는 단원만. '이해함' 단원은 맨 뒤로 미룬다. 사람이 고친 날에 노트가 잡힌 단원과, 지난 날 노트가 잡혔고 실제로 읽음·이해함 표시를 한 단원은 첫 바퀴에서 뺀다(못 읽은 단원은 다시 담긴다).
-   - 하루 노트 수 k = min(5, max(설정의 하루 노트 수, ceil(남은 단원 수 ÷ 공부일 수))). 단원 하나마다 노트 1 + O/X + 기출(설정의 하루 O/X·기출 개수, 단원 문항이 적으면 그 수).
+   - 하루 노트 수 k = min(설정의 하루 노트 수, ceil(남은 단원 수 ÷ 공부일 수)): 설정값을 넘지 않는다.
+   - 설정의 하루 O/X·기출 개수는 '하루 전체 목표'다. 그날 단원 k 개에 나눠 담는다(split: 똑같이 나누고 나머지는 앞 단원부터 1개씩).
+     단원 문항이 모자라면 그 수까지만 잡으므로 하루 합계는 설정값을 넘지 않는다(기출이 단원 수보다 적으면 앞 단원부터 담는다).
    - 첫 바퀴가 끝나고도 날이 남으면 복귀 순서를 다시 돌며 O/X·기출만 잡는다(노트는 다시 잡지 않는다).
    - 날이 모자라 못 담은 단원은 결과의 unscheduled 로 알린다.
 5. 평일마다 복습 review_per_day(기본 10)개.
@@ -22,7 +24,6 @@ from .quiz import list_units
 DEFAULTS = {"final_days": 7, "review_per_day": 10}
 LIMITS = {"final_days": (0, 30), "review_per_day": (0, 50)}
 KIND_LIMITS = {"note": (1, 1), "ox": (1, 200), "quiz": (1, 100), "review": (1, 200), "mock": (1, 5)}
-MAX_NOTES_PER_DAY = 5
 FINAL_REVIEW_MIN, FINAL_QUIZ = 20, 10
 
 
@@ -85,6 +86,15 @@ def save_settings(conn, values, today=None):
 
 
 # ------------------------------------------------------------------ 생성
+def split(total, parts):
+    """하루 전체 목표 total 을 parts 개 단원에 똑같이 나눈다(나머지는 앞 단원부터 1개씩). 합계는 항상 total."""
+    if parts <= 0:
+        return []
+    base, extra = divmod(total, parts)
+    return [base + (1 if i < extra else 0) for i in range(parts)]
+
+
+
 def _edited_days(conn, first):
     return {r["day"] for r in conn.execute("SELECT DISTINCT day FROM plans WHERE user_id = ? AND edited = 1 AND day >= ?", (conn.user_id, first))}
 
@@ -121,7 +131,7 @@ def generate(conn, today=None):
     final_start = exam - s["final_days"] if s["final_days"] else exam
     final = [d for d in days if d >= final_start]
     study_days = [d for d in days if d < final_start]
-    notes_per_day = min(MAX_NOTES_PER_DAY, max(daily["daily_notes"], math.ceil(len(first_pass) / len(study_days)) if study_days else 1))
+    notes_per_day = min(daily["daily_notes"], max(1, math.ceil(len(first_pass) / len(study_days)) if study_days else 1))
 
     rows = []                                    # (day, kind, unit, target)
     feed = [(u, True) for u in first_pass]
@@ -139,17 +149,20 @@ def generate(conn, today=None):
         return unit, False
 
     for d in study_days:
+        entries = []
         for _ in range(notes_per_day):
             entry = next_entry()
             if entry is None:
                 break
-            unit, with_note = entry
+            entries.append(entry)
+        ox_share, quiz_share = split(daily["daily_ox"], len(entries)), split(daily["daily_questions"], len(entries))
+        for (unit, with_note), n_ox, n_quiz in zip(entries, ox_share, quiz_share):
             if with_note:
                 rows.append((d, "note", unit, 1))
-            if min(daily["daily_ox"], ox_total.get(unit, 0)) > 0:
-                rows.append((d, "ox", unit, min(daily["daily_ox"], ox_total[unit])))
-            if min(daily["daily_questions"], q_total.get(unit, 0)) > 0:
-                rows.append((d, "quiz", unit, min(daily["daily_questions"], q_total[unit])))
+            if min(n_ox, ox_total.get(unit, 0)) > 0:
+                rows.append((d, "ox", unit, min(n_ox, ox_total[unit])))
+            if min(n_quiz, q_total.get(unit, 0)) > 0:
+                rows.append((d, "quiz", unit, min(n_quiz, q_total[unit])))
         if s["review_per_day"]:
             rows.append((d, "review", "", s["review_per_day"]))
     for n, d in enumerate(final):
