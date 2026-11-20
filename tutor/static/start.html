@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>시작하기 · 회계튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main>
+<h1>시작하기</h1>
+<div class="sub">전산세무 1급 이론은 어떤 범위를, 어떤 순서로 공부하면 좋은지 먼저 훑어 보세요. <a id="skipLink" href="/">건너뛰기</a></div>
+<section class="paper" aria-label="이론 범위">
+  <h2>이론 범위</h2>
+  <table id="scopeTable" class="week-table"></table>
+  <div class="small">단원 수와 회당 평균 배점은 기출 문제은행에서 계산한 값입니다(회당 평균 배점 = 단원별 회당 배점의 합).</div>
+</section>
+<section class="paper" style="margin-top:var(--s4)" aria-label="추천 학습 순서">
+  <h2>추천 학습 순서 (상위 8개)</h2>
+  <div class="small" id="basis"></div>
+  <ol id="topList"></ol>
+</section>
+<section class="paper" style="margin-top:var(--s4)">
+  <a id="goPlan" class="btn" href="/plan?from=start">계획 세우기로 이동</a>
+  <span class="small"> 계획을 세우면 첫 화면이 '오늘의 공부'로 시작합니다.</span>
+</section>
+</main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("start");
+(async () => {
+  const { ok, data } = await api("/api/start");
+  if (!ok) return;
+  const rows = [];
+  for (const s of data.scope) {
+    rows.push(el("tr", { className: "scope-subject" }, el("td", {}, el("b", { textContent: s.subject })), el("td", { className: "num", textContent: s.units }), el("td", { className: "num", textContent: s.points_per_round })));
+    for (const t of s.taxes) rows.push(el("tr", { className: "scope-tax" }, el("td", { textContent: "· " + t.tax }), el("td", { className: "num", textContent: t.units }), el("td", { className: "num", textContent: t.points_per_round })));
+  }
+  $("scopeTable").replaceChildren(el("thead", {}, el("tr", {}, ...["과목 · 세목", "단원 수", "회당 평균 배점"].map((h) => el("th", { textContent: h })))), el("tbody", {}, ...rows));
+  $("basis").textContent = "기준: " + data.basis;
+  $("topList").replaceChildren(...data.top.map((r) => el("li", {}, el("b", { textContent: r.unit }), ` — ${r.subject}${r.tax ? " · " + r.tax : ""}, 회당 ${r.points_per_round}점, 최근 출제율 ${Math.round(r.recent_rate * 100)}%` + (r.wrong_open ? `, 오답 ${r.wrong_open}개 남음` : ""))));
+  if (data.has_plan) $("goPlan").textContent = "계획 다시 세우기";
+})();
+</script>
+</body>
+</html>

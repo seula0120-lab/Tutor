@@ -40,7 +40,7 @@ $("loginForm").addEventListener("submit", async (e) => {
   const body = { username: $("username").value, password: $("password").value };
   if (setup) body.name = $("name").value;
   const { ok, data } = await api(setup ? "/api/setup" : "/api/login", body);
-  if (ok) { location.href = "/"; } else { $("loginError").textContent = data.error || "로그인할 수 없습니다."; }
+  if (ok) { location.href = data.has_plan === false ? "/start" : "/"; } else { $("loginError").textContent = data.error || "로그인할 수 없습니다."; }
 });
 </script>
 </body>

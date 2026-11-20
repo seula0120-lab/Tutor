@@ -264,6 +264,10 @@ h2 { font-size: 17px; margin: 0 0 var(--s2); }
 .today-done { color: var(--ok); font-weight: 800; }
 .today-list { list-style: none; margin: var(--s3) 0 0; padding: 0; }
 .today-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: var(--s2); align-items: center; padding: var(--s2) 0; border-bottom: 1px solid var(--line); }
+.today-row.next { background: var(--accent-soft); border-radius: var(--s2); padding-left: var(--s2); padding-right: var(--s2); }
+.next-badge { display: inline-block; font-size: 12px; font-weight: 800; color: #fff; background: var(--accent); border-radius: 999px; padding: 0 var(--s2); }
+.today-reason { color: var(--muted); }
+.today-units { font-size: 15px; margin-top: var(--s1); }
 .today-row.done .today-label { color: var(--muted); }
 .today-check { font-weight: 800; color: var(--muted); text-align: center; }
 .today-row.done .today-check { color: var(--ok); }

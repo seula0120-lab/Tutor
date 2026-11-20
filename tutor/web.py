@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import auth, carry, clock, daily, match, plan, schedule, favorites, glossary_review, mock, ox, quiz, records, review, study, weekly
+from . import auth, carry, start, clock, daily, match, plan, schedule, favorites, glossary_review, mock, ox, quiz, records, review, study, weekly
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -28,7 +28,7 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/calendar": "calendar.html", "/review-week": "review_week.html", "/account": "account.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/calendar": "calendar.html", "/review-week": "review_week.html", "/start": "start.html", "/account": "account.html"}
 LOGIN_PAGE = "login.html"          # 로그인 없이 볼 수 있는 화면은 이것 하나(/login)
 COOKIE = "session"
 ADMIN_PAGES = {"/admin"}
@@ -287,7 +287,12 @@ def auth_dispatch(method, path, body, conn, token, local):
             user = auth.authenticate(conn, body.get("username"), body.get("password"))
         except auth.LoginError as err:
             return 401, {"error": str(err)}, None
-        return 200, {"user": user}, ("set", auth.create_session(conn, user["id"]))
+        mine, conn.user_id = conn.user_id, user["id"]
+        try:
+            has_plan = plan.configured(conn)               # 계획이 없으면 로그인 화면이 /start 로 보낸다
+        finally:
+            conn.user_id = mine
+        return 200, {"user": user, "has_plan": has_plan}, ("set", auth.create_session(conn, user["id"]))
     if (method, path) == ("POST", "/api/setup"):
         if auth.has_users(conn):
             return 403, {"error": "이미 계정이 있습니다."}, None
@@ -340,6 +345,7 @@ ROUTES = {
     ("GET", "/api/ox/stats"): lambda conn, params, body: (200, ox.stats(conn)),
     ("POST", "/api/ox/answer"): api_ox_answer,
     ("GET", "/api/review"): lambda conn, params, body: (200, review.summary(conn)),
+    ("GET", "/api/start"): lambda conn, params, body: (200, start.overview(conn)),
     ("GET", "/api/today"): lambda conn, params, body: (200, daily.today_card(conn)),
     ("POST", "/api/settings"): api_settings_save,
     ("POST", "/api/test/clock"): api_test_clock,

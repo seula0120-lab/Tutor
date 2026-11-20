@@ -25,6 +25,7 @@
 <main>
 <div id="ask-panel" class="panel active">
 <section id="today" class="box today-card" aria-label="오늘의 공부"></section>
+<div id="askBox" hidden>
 <h1>전산세무 1급 이론 튜터</h1>
 <div class="sub">이론 30점 영역 · 기출 문항 검색과 공식 해설 · 로컬(127.0.0.1)에서만 동작 · <a id="glossaryReviewLink" href="/glossary-review">용어 사전 검토</a></div>
 <div>
@@ -39,6 +40,7 @@
   <div id="favs" class="small" style="margin-top:4px"></div>
   <div class="small" style="margin-top:6px">요약 카드는 API 키 없이 동작합니다. API 키가 있으면 카드의 문장 모음이 Anthropic API 로 전송되어 3~5줄 설명이 덧붙고, 사용량에 따라 비용이 듭니다.</div>
   <div id="answer"></div>
+</div>
 </div>
 </div>
 
@@ -112,6 +114,7 @@ document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click",
   document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.tab || p.id === tab.dataset.tab + "-panel"));
   history.replaceState(null, "", "#" + tab.dataset.tab);
+  $("askBox").hidden = location.hash !== "#ask";                                  // 질문 입력창은 '질문' 탭(/#ask)에서만 보인다. 홈(/)은 오늘의 공부가 주인공
   revealActiveTab();
 }));
 function revealActiveTab() { const nav = document.querySelector(".tabs"); scrollTabIntoView(nav); }
@@ -449,11 +452,13 @@ async function loadToday() {
   const head = el("h2", {}, "오늘의 공부 ", el("span", { id: "todayStatus", className: data.complete ? "today-done" : "small", textContent: data.rest ? data.message : data.complete ? "오늘 완료" : `${done}/${data.tasks.length} 완료` }));
   const list = el("ul", { className: "today-list", id: "todayList" });
   for (const t of data.tasks) {
-    const row = el("li", { className: "today-row" + (t.done ? " done" : "") });
+    const row = el("li", { className: "today-row" + (t.done ? " done" : "") + (t.next ? " next" : "") });
     row.dataset.task = t.key;
     const go = el("a", { className: t.done ? "btn ghost-btn" : "btn", href: TASK_HREF[t.kind](t), textContent: t.kind === "review" ? (t.done ? "복습 열기" : "바로 시작") : t.kind === "note" ? "노트 열기" : "시작" });
     row.append(el("span", { className: "today-check", ariaLabel: t.done ? "완료" : "아직", textContent: t.done ? "✔" : "○" }), el("span", { className: "today-label" }, el("b", { textContent: t.label + " " }), t.detail,
-      ...(t.carried ? [" ", el("span", { className: "carry-badge", textContent: t.carried_note })] : [])), go);
+      ...(t.carried ? [" ", el("span", { className: "carry-badge", textContent: t.carried_note })] : []),
+      ...(t.next ? [" ", el("span", { className: "next-badge", textContent: "다음 할 일" })] : []),
+      el("div", { className: "today-reason small", textContent: t.reason })), go);
     list.append(row);
   }
   const pct = (x) => (x.rate === null ? "-" : Math.round(x.rate * 100) + "%");
@@ -480,7 +485,9 @@ async function loadToday() {
   });
   form.append(save, msg);
   settings.append(form);
-  card.replaceChildren(head,
+  const unitLine = data.units.length ? el("div", { id: "todayUnits", className: "today-units" }, "오늘 단원: ",
+    ...data.units.flatMap((u, i) => [i ? " · " : "", el("b", { textContent: u.unit }), ` (${u.subject}${u.tax ? " · " + u.tax : ""})`])) : null;
+  card.replaceChildren(head, ...(unitLine ? [unitLine] : []),
     el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date} · `,
       el("a", { id: "calendarLink", href: data.plan ? "/calendar" : "/plan", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
     list, week, settings, el("div", { className: "small", id: "todayMsg" }));
@@ -490,6 +497,7 @@ loadToday();
 loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); renderRecent(); loadFavorites();
 function tabFromHash() { if (document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`)) showTab(location.hash.slice(1)); }   // 다른 화면의 탭 링크(/#answers 등)
 tabFromHash();
+if (!location.hash) document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));   // 홈: 탭이 아니라 '오늘의 공부' 화면
 window.addEventListener("hashchange", tabFromHash);
 watchTabOverflow(document.querySelector(".tabs"));
 revealActiveTab();

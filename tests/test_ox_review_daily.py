@@ -225,7 +225,7 @@ def test_settings_validation_and_defaults(db):
 def test_today_plan_picks_unit_with_note_that_is_not_understood_and_keeps_it_all_day(db):
     plan = daily.today_plan(db)
     unit = next(t["unit"] for t in plan["tasks"] if t["kind"] == "note")
-    assert [t["kind"] for t in plan["tasks"]] == ["review", "note", "ox", "quiz"]
+    assert [t["kind"] for t in plan["tasks"]] == ["note", "ox", "quiz"]          # 순서 변경: 노트 → O/X → 기출 → 복습, 복습할 것이 0개면 줄이 없다
     study.save_progress(db, unit, "understood")
     again = daily.today_plan(db)
     assert next(t["unit"] for t in again["tasks"] if t["kind"] == "note") == unit        # 오늘은 바뀌지 않는다
@@ -238,14 +238,14 @@ def test_today_complete_when_every_task_is_done(db, monkeypatch):
     monkeypatch.setattr(study, "load_note", lambda subject, unit, study_dir=None: {"concept": {"lines": []}})   # 시험용 문항 은행의 단원에도 노트가 있는 셈
     daily.save_settings(db, {"daily_ox": 5, "daily_questions": 1})
     plan = daily.today_plan(db)
-    assert plan["complete"] is False and plan["tasks"][0]["done"] is True            # 복습할 것이 없으면 복습 칸은 완료
-    unit = plan["tasks"][1]["unit"]
+    assert plan["complete"] is False and not [t for t in plan["tasks"] if t["kind"] == "review"]   # 복습할 것이 없으면 복습 줄이 없다
+    unit = plan["tasks"][0]["unit"]
     subject, tax, _ = study.find_unit(db, unit)
     study.save_progress(db, unit, "read")
     for p in ox.pick(db, subject, tax, unit, 5):
         ox.answer(db, p["key"], "O")
     need_ox = next(t for t in daily.today_plan(db)["tasks"] if t["kind"] == "ox")["need"]
-    assert daily.today_plan(db)["tasks"][2]["have"] == need_ox
+    assert next(t for t in daily.today_plan(db)["tasks"] if t["kind"] == "ox")["have"] == need_ox
     qid = db.execute("SELECT id FROM questions WHERE unit = ?", (unit,)).fetchone()["id"]
     records.save(db, qid, "1", True, source="quiz")
     assert daily.today_plan(db)["complete"] is True
@@ -255,10 +255,10 @@ def test_wrong_review_item_keeps_today_incomplete_until_reviewed(db, monkeypatch
     monkeypatch.setattr(study, "load_note", lambda subject, unit, study_dir=None: {"concept": {"lines": []}})
     records.save(db, "12-2", "1", False, now=clock.now())
     clock.set_offset(1)
-    first = daily.today_plan(db)["tasks"][0]
-    assert first["done"] is False and first["need"] == 1
+    review_of = lambda: next(t for t in daily.today_plan(db)["tasks"] if t["kind"] == "review")
+    assert review_of()["done"] is False and review_of()["need"] == 1
     records.save(db, "12-2", "4", True, now=clock.now())
-    assert daily.today_plan(db)["tasks"][0]["done"] is True
+    assert not [t for t in daily.today_plan(db)["tasks"] if t["kind"] == "review"]       # 다 복습하면 오늘 복습할 것이 0개 → 줄이 사라진다(완료 계산에서도 빠짐)
 
 
 def test_streak_counts_consecutive_days_and_week_has_rates(db):

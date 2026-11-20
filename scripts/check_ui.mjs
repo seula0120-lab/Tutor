@@ -38,6 +38,7 @@ const STUDY_SHOTS = join(SHOTS, "study");
 const OX_SHOTS = join(SHOTS, "ox");
 const CAL_SHOTS = join(SHOTS, "calendar");
 const CARRY_SHOTS = join(SHOTS, "carry");
+const START_SHOTS = join(SHOTS, "start");
 const NUM_SHOTS = join(SHOTS, "numbers");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
@@ -47,6 +48,7 @@ mkdirSync(STUDY_SHOTS, { recursive: true });
 mkdirSync(OX_SHOTS, { recursive: true });
 mkdirSync(CAL_SHOTS, { recursive: true });
 mkdirSync(CARRY_SHOTS, { recursive: true });
+mkdirSync(START_SHOTS, { recursive: true });
 mkdirSync(NUM_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -158,7 +160,8 @@ async function main() {
     await page.goto(base + "/login");
     await page.waitFor(`document.getElementById('username') && document.getElementById('loginBtn').textContent === '로그인'`, "로그인 화면");
     await page.evaluate(`document.getElementById('username').value = ${JSON.stringify(username)}; document.getElementById('password').value = ${JSON.stringify(password)}; document.getElementById('loginBtn').click(); true`);
-    await page.waitFor(`location.pathname === '/' && document.getElementById('userName')`, "로그인 뒤 첫 화면");
+    await page.waitFor(`(location.pathname === '/' || location.pathname === '/start') && document.getElementById('userName')`, "로그인 뒤 첫 화면");
+    if (await page.evaluate(`location.pathname`) === "/start") await page.goto(base + "/");     // 계획 없는 사용자는 /start 로 오지만, 대부분의 점검은 홈에서 시작한다(/start 는 아래 전용 시나리오)
   };
   await logIn("admin", "admin-pass-1");
 
@@ -570,8 +573,8 @@ async function main() {
     assert((await getJson("/api/review")).due_count === 0, "복습을 끝냈는데 오늘 복습할 것이 남음");
 
     await page.goto(base + "/");
-    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length === 4`, "오늘의 공부 4줄");
-    assert(await page.evaluate(`document.getElementById('todayStatus').textContent !== '오늘 완료' && document.querySelector('#todayList [data-task="review"]').classList.contains('done')`), "복습만 끝난 상태가 아님");
+    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length === 3`, "오늘의 공부 3줄(복습을 다 하면 복습 줄이 사라짐)");
+    assert(await page.evaluate(`document.getElementById('todayStatus').textContent !== '오늘 완료' && !document.querySelector('#todayList [data-task="review"]')`), "복습만 끝난 상태가 아님(복습 줄이 없어야 함)");
     assert((await page.evaluate(`document.getElementById('todayMeta').textContent`)).includes("예정된 복습") && (await page.evaluate(`document.getElementById('todayMeta').textContent`)).includes("아직 날짜 안 됨"), "예정된 복습 표시 없음");
     assert(await page.evaluate(`document.getElementById('weekTable').querySelectorAll('tbody tr').length === 7 && /\\d+일/.test(document.getElementById('streakDays').textContent)`), "지난 7일·연속 일수 표시 없음");
     await page.evaluate(`document.querySelector('.today-settings summary').click(); document.getElementById('set-daily_ox').value = '5'; document.getElementById('set-daily_questions').value = '2'; document.getElementById('settingsSave').click(); true`);
@@ -1042,6 +1045,64 @@ async function main() {
     await page.shotTo("주간-mobile", CARRY_SHOTS);
     await page.viewport(1100, 900, false);
     await setDay(0);
+    await logOut();
+    await logIn("admin", "admin-pass-1");
+  });
+
+  await scenario("첫 화면 흐름: 계획 없는 사용자 로그인 → 시작하기 → 계획 세우기 → 홈(오늘의 공부 순서·다음 할 일), 계획 있는 사용자는 바로 홈", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('logoutBtn')`, "관리자 화면");
+    assert(await page.evaluate(`api('/api/users', { username: 'starter', name: '시작', password: 'starter-pass-1' }).then((r) => r.ok)`), "starter 계정 만들기");
+    await logOut();
+    await page.evaluate(`document.getElementById('username').value = 'starter'; document.getElementById('password').value = 'starter-pass-1'; document.getElementById('loginBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/start' && document.querySelectorAll('#topList li').length > 0`, "로그인 → /start");
+    const scope = await page.evaluate(`[...document.querySelectorAll('#scopeTable tbody tr')].map((r) => r.textContent)`);
+    for (const need of ["재무회계", "원가회계", "세무회계", "부가가치세", "소득세", "법인세"]) assert(scope.some((t) => t.includes(need)), "이론 범위에 없음: " + need);
+    assert((await page.evaluate(`document.querySelectorAll('#topList li').length`)) === 8, "추천 순서 8개");
+    assert((await page.evaluate(`document.getElementById('basis').textContent`)).startsWith("기준:"), "기준 설명 한 줄");
+    assert((await page.evaluate(`document.getElementById('skipLink').getAttribute('href')`)) === "/", "건너뛰기 링크");
+    await page.shotTo("시작하기-light", START_SHOTS);
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/start");
+    await page.waitFor(`document.querySelectorAll('#topList li').length === 8`, "모바일 /start");
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤(/start)");
+    await page.shotTo("시작하기-mobile", START_SHOTS);
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/start");
+    await page.waitFor(`document.getElementById('goPlan')`, "계획 세우기 버튼");
+    await page.evaluate(`document.getElementById('goPlan').click(); true`);
+    await page.waitFor(`location.pathname === '/plan' && document.getElementById('generate') && document.getElementById('dailyNotes').value !== ''`, "/plan(설정 불러오기 끝)");
+    const exam = await page.evaluate(`(() => { const e = new Date(); e.setDate(e.getDate() + 20); return e.toLocaleDateString('sv-SE'); })()`);
+    await page.evaluate(`document.getElementById('examDate').value = ${JSON.stringify(exam)}; document.getElementById('generate').click(); true`);
+    await page.waitFor(`location.pathname === '/' && document.getElementById('todayList')`, "계획 만들기 → 홈");
+    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length >= 3`, "오늘의 공부 줄");
+    const kinds = await page.evaluate(`[...document.querySelectorAll('#todayList .today-row')].map((r) => r.dataset.task.split(':')[0])`);
+    const order = ["note", "ox", "quiz", "mock", "review"];
+    assert(kinds.every((k, i) => i === 0 || order.indexOf(kinds[i - 1]) <= order.indexOf(k)) && kinds[0] === "note", "카드 순서: " + kinds.join(","));
+    assert(!kinds.includes("review"), "복습할 것이 0개면 복습 줄이 없음");
+    const rows = await page.evaluate(`[...document.querySelectorAll('#todayList .today-row')].map((r) => ({ next: r.classList.contains('next'), reason: r.querySelector('.today-reason').textContent, done: r.classList.contains('done') }))`);
+    assert(rows.every((r) => r.reason.length > 5), "줄마다 이유 한 줄");
+    assert(rows.filter((r) => r.next).length === 1 && rows[rows.findIndex((r) => !r.done)].next, "다음 할 일 = 첫 미완료 줄");
+    assert((await page.evaluate(`document.getElementById('todayUnits').textContent`)).startsWith("오늘 단원:"), "카드 맨 위 오늘 단원·과목");
+    assert(await page.evaluate(`document.getElementById('askBox').hidden && document.getElementById('today').getBoundingClientRect().top < 300`), "홈: 질문창은 숨기고 오늘의 공부가 맨 위");
+    await page.shotTo("홈-오늘의공부-light", START_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    await sleep(250);
+    await page.shotTo("홈-오늘의공부-dark", START_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length >= 3`, "모바일 홈");
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤(홈)");
+    await page.shotTo("홈-오늘의공부-mobile", START_SHOTS);
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/#ask");                                           // 질문 기능은 /#ask 로 그대로 남아 있다
+    await page.waitFor(`!document.getElementById('askBox').hidden && document.getElementById('q')`, "질문창(/#ask)");
+    // 계획이 있는 사용자는 로그인하면 바로 홈
+    await logOut();
+    await page.evaluate(`document.getElementById('username').value = 'starter'; document.getElementById('password').value = 'starter-pass-1'; document.getElementById('loginBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/' && document.getElementById('todayList')`, "계획 있는 사용자 → 바로 홈");
     await logOut();
     await logIn("admin", "admin-pass-1");
   });

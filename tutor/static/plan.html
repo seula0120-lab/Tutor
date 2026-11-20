@@ -68,6 +68,8 @@ $("generate").addEventListener("click", async () => {
   fill(res.data);
   const r = res.data.result;
   $("planMsg").textContent = `${r.from} ~ ${r.to}: 공부일 ${r.study_days}일 + 마무리 ${r.final_days}일, 쉬는 날 ${r.rest_days}일, 직접 고친 날 ${r.kept_edited_days}일 유지, 하루 노트 ${r.notes_per_day}개.` + (r.unscheduled.length ? ` 날이 모자라 못 담은 단원 ${r.unscheduled.length}개: ${r.unscheduled.join(", ")}` : "");
+  $("planMsg").append(" ", el("a", { id: "goHome", className: "btn", href: "/", textContent: "오늘의 공부로 가기" }));
+  if (new URLSearchParams(location.search).get("from") === "start") setTimeout(() => { location.href = "/"; }, 1500);   // 시작하기 → 계획 → 홈
 });
 (async () => { const { ok, data } = await api("/api/plan"); if (ok) fill(data); })();
 </script>

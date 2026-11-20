@@ -113,8 +113,34 @@ def _planned_card(conn, today, settings, due):
     return {**base, "tasks": tasks, "complete": all(t["done"] for t in tasks), "rest": False}
 
 
+ORDER = ("note", "ox", "quiz", "mock", "review")           # 배우기 → 확인 → 적용 → (모의고사) → 복습
+REASONS = {"note": "오늘 단원의 개념을 먼저 읽는다", "ox": "읽은 개념을 제대로 이해했는지 확인한다", "quiz": "실제 시험 문제에 적용한다",
+           "mock": "시험 형식으로 한 번에 풀어 본다", "review": "예전에 틀린 문제를 다시 푼다"}
+
+
+def arrange(card):
+    """카드를 화면 순서로 다듬는다: 종류 순서(노트→O/X→기출→모의고사→복습, 같은 종류는 원래 순서), 복습할 것이 0개면 복습 줄 제거(완료 계산에서도 빠짐),
+    줄마다 이유 한 줄, 아직 안 한 첫 줄 하나를 '다음 할 일'(next)로 표시, 맨 위에 오늘 단원과 과목. 순서를 강제하지는 않는다."""
+    tasks = [t for t in card["tasks"] if not (t["kind"] == "review" and t["need"] == 0)]
+    tasks.sort(key=lambda t: ORDER.index(t["kind"]))
+    first_open = next((t for t in tasks if not t["done"]), None)
+    for t in tasks:
+        t["reason"] = REASONS[t["kind"]]
+        t["next"] = t is first_open
+    units, seen = [], set()
+    for t in tasks:
+        if t["unit"] and t["unit"] not in seen and t["kind"] in ("note", "ox", "quiz"):
+            seen.add(t["unit"])
+            units.append({"unit": t["unit"], "subject": t["subject"], "tax": t["tax"]})
+    return {**card, "tasks": tasks, "complete": all(t["done"] for t in tasks), "units": units}
+
+
 def today_plan(conn, today=None):
-    """오늘의 공부 카드: 복습·단원별 할 일과 완료 여부. 계획(/plan)이 있으면 그날 계획이 우선한다."""
+    """오늘의 공부 카드: 단원별 노트 → O/X → 기출, 마지막에 복습(있을 때만). 계획(/plan)이 있으면 그날 계획이 우선한다."""
+    return arrange(_today_plan(conn, today))
+
+
+def _today_plan(conn, today=None):
     today = clock.today() if today is None else today
     settings = get_settings(conn)
     due = review.summary(conn, today)
