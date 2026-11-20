@@ -193,3 +193,10 @@ def test_cost_notes_reach_the_page_with_pitfalls_and_example(db):
         assert formula["example"]["id"] == formula["example_id"] and "answer" not in formula["example"], unit
         assert out["drafts"] == ["concept", "practice", "formula"], unit
         assert any("확인 필요" in t for t in out["note"]["practice"]), unit
+
+
+def test_cost_concept_note_states_the_no_ending_inventory_condition(db):
+    """112-9 는 '기말재고자산은 없다고 가정'한 문제다. 노트가 그 조건 없이 '이익은 변하지 않는다'고 하면 안 된다."""
+    line = next(l["text"] for l in study.load_note("원가회계", "원가개념·분류")["concept"]["lines"] if "광고선전비" in l["text"])
+    assert "기말재고가 없다고 가정할 때" in line and "기말재고가 남으면" in line and "재고자산에 포함" in line
+    assert "112-9" in next(l["sources"] for l in study.load_note("원가회계", "원가개념·분류")["concept"]["lines"] if "광고선전비" in l["text"])
