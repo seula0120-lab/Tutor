@@ -12,7 +12,7 @@ from tutor import auth, favorites, records
 from tutor.db import BACKUP_SUFFIX, PERSONAL, connect
 from tutor.web import Handler
 
-PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results")
+PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results", "plans", "plan_settings")
 
 
 @pytest.fixture(autouse=True)
@@ -257,3 +257,24 @@ def test_setup_login_isolation_and_admin_only_over_http(server):
 
     assert call(base, "POST", "/api/logout", {}, bob_cookie)[0] == 200
     assert call(base, "GET", "/api/notebook", cookie=bob_cookie)[0] == 401         # 로그아웃하면 그 쿠키는 쓸 수 없다
+
+
+def test_password_change_and_reset_over_http(server):
+    base, _ = server
+    _, _, headers = call(base, "POST", "/api/setup", {"username": "admin", "password": "admin-pass-1", "name": "관리자"})
+    admin_cookie = headers["Set-Cookie"].split(";")[0]
+    call(base, "POST", "/api/users", {"username": "bob", "password": "bob-password"}, admin_cookie)
+    _, bob_cookie, _ = login(base, "bob", "bob-password")
+    _, bob_cookie2, _ = login(base, "bob", "bob-password")                       # 다른 기기
+    assert call(base, "POST", "/api/password", {"current": "wrong-password", "new": "new-password-1"})[0] == 401   # 로그인 없이
+    assert call(base, "POST", "/api/password", {"current": "wrong-password", "new": "new-password-1"}, bob_cookie)[0] == 403
+    assert call(base, "POST", "/api/password", {"current": "bob-password", "new": "short"}, bob_cookie)[0] == 400
+    assert call(base, "POST", "/api/password", {"current": "bob-password", "new": "new-password-1"}, bob_cookie)[0] == 200
+    assert call(base, "GET", "/api/notebook", cookie=bob_cookie)[0] == 200          # 지금 세션은 유지
+    assert call(base, "GET", "/api/notebook", cookie=bob_cookie2)[0] == 401         # 다른 기기는 로그아웃
+    assert login(base, "bob", "bob-password")[0] == 401 and login(base, "bob", "new-password-1")[0] == 200
+    bob_id = next(u["id"] for u in call(base, "GET", "/api/users", cookie=admin_cookie)[1]["users"] if u["username"] == "bob")
+    assert call(base, "POST", "/api/users/password", {"user_id": bob_id, "password": "reset-password-1"}, bob_cookie)[0] == 403
+    assert call(base, "POST", "/api/users/password", {"user_id": bob_id, "password": "reset-password-1"}, admin_cookie)[0] == 200
+    assert call(base, "GET", "/api/notebook", cookie=bob_cookie)[0] == 401
+    assert login(base, "bob", "reset-password-1")[0] == 200

@@ -40,3 +40,20 @@ def today():
 def iso(day):
     """일 번호 → '2026-11-20'."""
     return date.fromordinal(day).isoformat()
+
+
+def day_range(day):
+    """일 번호 → 그날의 시각 범위 [시작, 끝) epoch 초(로컬 자정 기준)."""
+    from datetime import time as dtime
+    return (datetime.combine(date.fromordinal(day), dtime.min).timestamp(),
+            datetime.combine(date.fromordinal(day + 1), dtime.min).timestamp())
+
+
+def parse_iso(text):
+    """'2026-11-20' → 일 번호. 형식이 틀리면 ValueError."""
+    return date.fromisoformat(str(text)).toordinal()
+
+
+def weekday(day):
+    """일 번호 → 요일(월=0 … 일=6)."""
+    return date.fromordinal(day).weekday()

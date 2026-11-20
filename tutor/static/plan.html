@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>계획 세우기 · 회계튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main>
+<section class="paper">
+  <h2>계획 세우기</h2>
+  <p class="small">시험일과 공부 시작일, 쉬는 요일을 넣으면 복귀 순서대로 단원을 남은 날짜에 나눠 날짜별 계획을 만듭니다. '이해함'으로 표시한 단원은 뒤로 미루고, 시험 직전 며칠은 모의고사·복습 위주로 둡니다. 직접 고친 날은 다시 만들어도 덮어쓰지 않습니다. 계획은 <a href="/calendar">캘린더</a>에서 실제 기록과 맞춰 봅니다.</p>
+  <div class="plan-form" id="planForm">
+    <label>시험일 <input type="date" id="examDate" required></label>
+    <label>공부 시작일 (비우면 오늘부터) <input type="date" id="startDate"></label>
+    <div><b>쉬는 요일</b><div class="days" id="restDays"></div></div>
+    <label>마무리 기간(일) — 시험 직전 모의고사·복습 위주 <input type="number" id="finalDays" min="0" max="30"></label>
+    <label>하루 복습 개수 <input type="number" id="reviewPerDay" min="0" max="50"></label>
+    <div class="small">단원마다 잡는 분량: 하루 노트 수·O/X·기출 개수는 첫 화면 '하루 분량 설정'과 같은 값입니다.</div>
+    <div class="row">
+      <label>노트 수 <input type="number" id="dailyNotes" min="1" max="5"></label>
+      <label>O/X <input type="number" id="dailyOx" min="5" max="50"></label>
+      <label>기출 <input type="number" id="dailyQuestions" min="1" max="30"></label>
+    </div>
+    <div class="row"><button id="saveSettings" type="button" class="ghost">설정 저장</button><button id="generate" type="button">계획 만들기(다시 만들기)</button></div>
+    <div id="planMsg" class="small" role="status"></div>
+  </div>
+</section>
+<section class="paper" style="margin-top:var(--s4)">
+  <h3>날짜별 계획</h3>
+  <table id="planDays"><thead><tr><th>날짜</th><th>상태</th><th>계획</th></tr></thead><tbody></tbody></table>
+</section>
+</main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("calendar");
+const NAMES = ["월", "화", "수", "목", "금", "토", "일"];
+const STATE_LABEL = { done: "완료", partial: "부분", missed: "미달", rest: "쉬는 날", future: "예정", exam: "시험일", empty: "-" };
+const restBoxes = NAMES.map((n, i) => { const c = el("input", { type: "checkbox", value: String(i) }); $("restDays").append(el("label", {}, c, " " + n)); return c; });
+function fill(data) {
+  const s = data.settings;
+  $("examDate").value = s.exam_date || ""; $("startDate").value = s.start_date || "";
+  restBoxes.forEach((c) => { c.checked = s.rest_days.includes(Number(c.value)); });
+  $("finalDays").value = s.final_days; $("reviewPerDay").value = s.review_per_day;
+  $("dailyNotes").value = data.daily.daily_notes; $("dailyOx").value = data.daily.daily_ox; $("dailyQuestions").value = data.daily.daily_questions;
+  $("planDays").querySelector("tbody").replaceChildren(...data.days.map((d) => {
+    const link = el("a", { href: "/calendar?date=" + d.date, textContent: `${d.date.slice(5)} (${NAMES[d.weekday]})` });
+    const row = el("tr", {}, el("td", {}, link), el("td", { textContent: (STATE_LABEL[d.state] || "") + (d.pct !== null && d.state !== "future" ? ` ${d.pct}%` : "") + (d.edited ? " ✎" : "") }), el("td", { textContent: d.summary }));
+    row.dataset.date = d.date; return row;
+  }));
+}
+const settingsBody = () => ({ exam_date: $("examDate").value, start_date: $("startDate").value, rest_days: restBoxes.filter((c) => c.checked).map((c) => Number(c.value)),
+  final_days: $("finalDays").value, review_per_day: $("reviewPerDay").value });
+async function saveAll() {
+  const a = await api("/api/settings", { daily_notes: $("dailyNotes").value, daily_ox: $("dailyOx").value, daily_questions: $("dailyQuestions").value });
+  if (!a.ok) { $("planMsg").textContent = a.data.error; return null; }
+  const res = await api("/api/plan/settings", settingsBody());
+  if (!res.ok) { $("planMsg").textContent = res.data.error; return null; }
+  return res.data;
+}
+$("saveSettings").addEventListener("click", async () => { const d = await saveAll(); if (d) { fill(d); $("planMsg").textContent = "설정을 저장했습니다."; } });
+$("generate").addEventListener("click", async () => {
+  if (!(await saveAll())) return;
+  const res = await api("/api/plan/generate", {});
+  if (!res.ok) { $("planMsg").textContent = res.data.error; return; }
+  fill(res.data);
+  const r = res.data.result;
+  $("planMsg").textContent = `${r.from} ~ ${r.to}: 공부일 ${r.study_days}일 + 마무리 ${r.final_days}일, 쉬는 날 ${r.rest_days}일, 직접 고친 날 ${r.kept_edited_days}일 유지, 하루 노트 ${r.notes_per_day}개.` + (r.unscheduled.length ? ` 날이 모자라 못 담은 단원 ${r.unscheduled.length}개: ${r.unscheduled.join(", ")}` : "");
+});
+(async () => { const { ok, data } = await api("/api/plan"); if (ok) fill(data); })();
+</script>
+</body>
+</html>

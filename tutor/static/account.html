@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>내 계정 · 회계튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main>
+<form id="pwForm" class="paper login-card">
+  <h2>내 비밀번호 바꾸기</h2>
+  <p class="small">현재 비밀번호를 확인한 뒤 바꿉니다. 다른 기기의 로그인은 풀립니다.</p>
+  <label for="curPw">현재 비밀번호</label><input id="curPw" type="password" autocomplete="current-password" required>
+  <label for="newPw">새 비밀번호 (8자 이상)</label><input id="newPw" type="password" autocomplete="new-password" required>
+  <label for="newPw2">새 비밀번호 확인</label><input id="newPw2" type="password" autocomplete="new-password" required>
+  <div id="pwMsg" class="login-error" role="status"></div>
+  <button id="pwBtn" type="submit">비밀번호 바꾸기</button>
+</form>
+</main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("");
+$("pwForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if ($("newPw").value !== $("newPw2").value) { $("pwMsg").textContent = "새 비밀번호가 서로 다릅니다."; return; }
+  const { ok, data } = await api("/api/password", { current: $("curPw").value, new: $("newPw").value });
+  $("pwMsg").textContent = ok ? "비밀번호를 바꿨습니다." : (data.error || "바꿀 수 없습니다.");
+  if (ok) $("pwForm").reset();
+});
+</script>
+</body>
+</html>

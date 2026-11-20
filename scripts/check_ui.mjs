@@ -13,12 +13,14 @@ const SHOTS = join(ROOT, "scratch", "screens");
 const DESIGN_SHOTS = join(SHOTS, "design");
 const STUDY_SHOTS = join(SHOTS, "study");
 const OX_SHOTS = join(SHOTS, "ox");
+const CAL_SHOTS = join(SHOTS, "calendar");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
 mkdirSync(SHOTS, { recursive: true });
 mkdirSync(DESIGN_SHOTS, { recursive: true });
 mkdirSync(STUDY_SHOTS, { recursive: true });
 mkdirSync(OX_SHOTS, { recursive: true });
+mkdirSync(CAL_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const procs = [];
@@ -273,7 +275,7 @@ async function main() {
     assert((await page.evaluate(`getComputedStyle(document.querySelector('.topbar')).position`)) === "sticky", "상단 바가 sticky 가 아님");
     const labels = await page.evaluate(`[...document.querySelectorAll('.topbar .tabs > *')].map((n) => n.textContent.trim())`);
     const order = ["질문", "기출 답안", "오답노트", "모의고사", "문제 분석"];
-    assert(order.every((l, i) => labels[i] === l) && labels[labels.length - 1] === "목차", "탭 순서가 다름: " + labels.join(" · "));
+    assert(order.every((l, i) => labels[i] === l) && labels[labels.length - 1] === "목차" && labels[labels.length - 2] === "캘린더", "탭 순서가 다름: " + labels.join(" · "));
     assert((await page.evaluate(`getComputedStyle(document.querySelector('.tab')).borderRadius`)) === "999px", "알약 모양이 아님");
     await page.waitFor(`Promise.all([document.fonts.load('16px Pretendard', '가'), document.fonts.load('600 16px "Noto Serif KR"', '가')]).then((r) => r.every((x) => x.length > 0))`, "번들 글꼴 로드");
     for (const path of ["/", "/toc", "/glossary-review"]) {
@@ -639,6 +641,136 @@ async function main() {
     await page.waitFor(`location.pathname === '/'`, "관리자 화면 막힘");
     await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
     await page.waitFor(`location.pathname === '/login'`, "로그아웃");
+    await logIn("admin", "admin-pass-1");
+  });
+
+  // ---- 계획 세우기 · 캘린더. planner 계정(오늘 기록 없음)으로: 계획 생성 → 일부(부분) → 나머지(완료) → 날짜 넘기면 어제는 완료, 오늘은 새 계획.
+  const logOut = async () => {
+    await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/login'`, "로그아웃");
+  };
+  const cellState = (date) => page.evaluate(`(document.querySelector('.cal-cell[data-date="${date}"]') || {}).dataset?.state`);
+  await scenario("계획 → 캘린더: 계획 생성 → 오늘 일부 수행(부분) → 나머지(완료) → 다음 날 새 계획", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('logoutBtn')`, "관리자 화면");
+    assert(await page.evaluate(`api('/api/users', { username: 'planner', name: '계획', password: 'planner-pass-1' }).then((r) => r.ok)`), "planner 계정 만들기");
+    await logOut();
+    await logIn("planner", "planner-pass-1");
+
+    await page.goto(base + "/plan");
+    await page.waitFor(`document.getElementById('examDate') && document.querySelectorAll('#restDays input').length === 7`, "계획 화면");
+    const info = await page.evaluate(`(() => { const d = new Date(); const e = new Date(); e.setDate(d.getDate() + 14); return { exam: e.toLocaleDateString('sv-SE'), rest: ((d.getDay() + 6) % 7 + 3) % 7 }; })()`);
+    await page.evaluate(`document.getElementById('examDate').value = ${JSON.stringify(info.exam)}; document.querySelectorAll('#restDays input')[${info.rest}].checked = true; document.getElementById('generate').click(); true`);
+    await page.waitFor(`document.getElementById('planMsg').textContent.includes('공부일')`, "계획 생성 결과");
+    assert(await page.evaluate(`document.querySelectorAll('#planDays tbody tr').length >= 10`), "날짜별 계획 표");
+    await sleep(200);
+    await page.shotTo("계획-light", CAL_SHOTS);
+
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
+    assert((await page.evaluate(`document.getElementById('dday').textContent`)) === "D-14", "D-day");
+    const today = await page.evaluate(`document.getElementById('todayDate').textContent`);
+    assert((await cellState(today)) === "future", "오늘(아직 안 함)은 예정 색");
+    await page.evaluate(`document.querySelector('.cal-cell.today').click(); true`);
+    await page.waitFor(`document.querySelectorAll('#planTable tbody tr').length >= 3`, "날짜 상세 계획 표");
+    await page.evaluate(`document.querySelector('#dayPanel').scrollIntoView(); true`);
+    await sleep(200);
+    await page.shotTo("날짜상세-light", CAL_SHOTS);
+
+    // 오늘 계획 중 노트만 한다 → 부분
+    const doIt = (kinds) => page.evaluate(`(async () => {
+      const tasks = (await api('/api/today')).data.tasks;
+      for (const t of tasks) {
+        if (!${JSON.stringify(kinds)}.includes(t.kind)) continue;
+        if (t.kind === 'note') await api('/api/study/progress', { unit: t.unit, status: 'read' });
+        if (t.kind === 'ox') { const set = (await api('/api/ox/set?' + query({ subject: t.subject, tax: t.tax, unit: t.unit, count: t.need }))).data.items; for (const i of set) await api('/api/ox/answer', { key: i.key, choice: 'O' }); }
+        if (t.kind === 'quiz') { const ids = (await api('/api/quiz_set?' + query({ subject: t.subject, tax: t.tax, unit: t.unit, count: t.need }))).data.ids; for (const id of ids) await api('/api/answer', { id, choice: '1' }); }
+      }
+      return tasks.length;
+    })()`);
+    assert((await doIt(["note"])) >= 3, "오늘 계획 항목이 3개 이상");
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
+    assert((await cellState(today)) === "partial", "오늘 부분: " + (await cellState(today)));
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length >= 3`, "오늘의 공부 카드(계획 기준)");
+    assert(await page.evaluate(`document.querySelector('#todayList .today-row.done') && document.querySelector('#todayList .today-row:not(.done)') && document.getElementById('calendarLink').textContent.includes('캘린더')`), "카드: 일부 완료");
+
+    await doIt(["ox", "quiz"]);
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
+    assert((await cellState(today)) === "done", "오늘 완료: " + (await cellState(today)));
+    await page.evaluate(`document.querySelector('.cal-cell.today').click(); true`);
+    await page.waitFor(`document.getElementById('dayState').textContent.includes('완료') && document.getElementById('actualList').textContent.includes('O/X')`, "상세: 완료·실제 기록");
+
+    // 사람이 고친 날은 다시 만들어도 남는다: 모레를 '쉬기' 로 저장 → 계획 다시 만들기 → 그대로 쉬는 날
+    const plus2 = await page.evaluate(`(() => { const d = new Date(); d.setDate(d.getDate() + 2); return d.toLocaleDateString('sv-SE'); })()`);
+    await page.evaluate(`document.querySelector('.cal-cell[data-date="${plus2}"]').click(); true`);
+    await page.waitFor(`document.getElementById('editBox') && document.getElementById('dayTitle').textContent.startsWith('${plus2}')`, "고치기 상자");
+    await page.evaluate(`document.getElementById('editBox').open = true; document.getElementById('restCheck').click(); document.getElementById('saveDay').click(); true`);
+    await page.waitFor(`document.querySelector('.cal-cell[data-date="${plus2}"]').dataset.state === 'rest'`, "쉬는 날로 저장");
+    await page.goto(base + "/plan");
+    await page.waitFor(`document.getElementById('generate')`, "계획 화면");
+    await page.evaluate(`document.getElementById('generate').click(); true`);
+    await page.waitFor(`document.getElementById('planMsg').textContent.includes('직접 고친 날 1일 유지')`, "다시 만들기: 고친 날 유지");
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
+    assert((await cellState(plus2)) === "rest", "고친 날은 다시 만든 뒤에도 쉬는 날");
+    assert((await cellState(today)) === "done", "오늘은 다시 만든 뒤에도 완료(한 일이 있는 오늘은 건드리지 않음)");
+
+    // 스크린샷: 라이트·다크·모바일
+    await page.evaluate(`document.querySelector('.cal-cell.today').click(); true`);
+    await page.waitFor(`document.getElementById('dayState')`, "상세");
+    await sleep(200);
+    await page.shotTo("캘린더-light", CAL_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    await sleep(250);
+    await page.shotTo("캘린더-dark", CAL_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.querySelectorAll('#weekList .week-row').length === 7`, "모바일 주간 목록");
+    assert(await page.evaluate(`getComputedStyle(document.getElementById('calGrid')).display === 'none' && getComputedStyle(document.getElementById('weekList')).display === 'block'`), "모바일은 주간 목록");
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤");
+    await page.evaluate(`document.getElementById('nextWeek').click(); true`);
+    await sleep(250);
+    await page.shotTo("캘린더-mobile", CAL_SHOTS);
+    await page.viewport(1100, 900, false);
+
+    // 다음 날로 넘기기: 어제는 완료, 오늘은 새 계획
+    await setDay(1);
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
+    assert((await page.evaluate(`document.getElementById('dday').textContent`)) === "D-13", "D-day 하루 줄어듦");
+    assert((await cellState(today)) === "done", "어제는 완료");
+    const nextToday = await page.evaluate(`document.getElementById('todayDate').textContent`);
+    assert(nextToday !== today && (await cellState(nextToday)) === "future", "오늘은 새 계획(예정)");
+    const card = await page.evaluate(`api('/api/today').then((r) => ({ plan: r.data.plan, n: r.data.tasks.length, complete: r.data.complete, date: r.data.date }))`);
+    assert(card.plan && card.n > 0 && !card.complete && card.date === nextToday, "오늘의 공부 카드가 새 날 계획");
+    await setDay(0);
+    await logOut();
+    await logIn("admin", "admin-pass-1");
+  });
+
+  await scenario("계정: 내 비밀번호 바꾸기 · 관리자 비밀번호 초기화", async () => {
+    await logOut();
+    await logIn("planner", "planner-pass-1");
+    await page.goto(base + "/account");
+    await page.waitFor(`document.getElementById('pwForm')`, "계정 화면");
+    await page.evaluate(`document.getElementById('curPw').value = 'planner-pass-1'; document.getElementById('newPw').value = 'planner-pass-2'; document.getElementById('newPw2').value = 'planner-pass-2'; document.getElementById('pwBtn').click(); true`);
+    await page.waitFor(`document.getElementById('pwMsg').textContent.includes('바꿨습니다')`, "비밀번호 변경");
+    await logOut();
+    await logIn("planner", "planner-pass-2");
+    await logOut();
+    await logIn("admin", "admin-pass-1");
+    await page.goto(base + "/admin");
+    await page.waitFor(`document.querySelectorAll('#resetUser option').length >= 3`, "관리자 화면");
+    await page.evaluate(`[...document.querySelectorAll('#resetUser option')].find((o) => o.textContent.startsWith('planner')).selected = true; document.getElementById('resetPassword').value = 'planner-pass-3'; document.getElementById('resetBtn').click(); true`);
+    await page.waitFor(`document.getElementById('resetMsg').textContent.includes('초기화했습니다')`, "비밀번호 초기화");
+    await logOut();
+    await logIn("planner", "planner-pass-3");
+    await logOut();
     await logIn("admin", "admin-pass-1");
   });
 

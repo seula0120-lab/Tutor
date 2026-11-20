@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import auth, clock, daily, favorites, glossary_review, mock, ox, quiz, records, review, study
+from . import auth, clock, daily, match, plan, schedule, favorites, glossary_review, mock, ox, quiz, records, review, study
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -28,7 +28,7 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/calendar": "calendar.html", "/account": "account.html"}
 LOGIN_PAGE = "login.html"          # 로그인 없이 볼 수 있는 화면은 이것 하나(/login)
 COOKIE = "session"
 ADMIN_PAGES = {"/admin"}
@@ -197,6 +197,70 @@ def api_users_create(conn, params, body):
     return 200, {"user": user, "users": auth.list_users(conn)}
 
 
+def api_password(conn, params, body):
+    """내 비밀번호 바꾸기(현재 비밀번호 확인)."""
+    try:
+        auth.change_password(conn, conn.user_id, body.get("current"), body.get("new"), keep_token=conn.token)
+    except auth.LoginError as err:
+        return 403, {"error": str(err)}
+    return 200, {"ok": True}
+
+
+def api_users_password(conn, params, body):
+    if not _admin_only(conn):
+        return 403, {"error": "관리자만 할 수 있습니다."}
+    auth.reset_password(conn, int(body.get("user_id")), body.get("password"))
+    return 200, {"ok": True}
+
+
+def _plan_overview(conn):
+    settings = plan.get_settings(conn)
+    today = clock.today()
+    days = []
+    if settings["exam_day"]:
+        first = min(max(settings["start_day"] or today, today), settings["exam_day"])
+        days = [{k: r[k] for k in ("date", "weekday", "state", "pct", "summary", "edited")}
+                for r in match.report_range(conn, first, settings["exam_day"], today)]
+    return {"settings": settings, "units": plan.unit_options(conn), "days": days, "today": clock.iso(today),
+            "daily": daily.get_settings(conn)}
+
+
+def api_plan(conn, params, body):
+    return 200, _plan_overview(conn)
+
+
+def api_plan_settings(conn, params, body):
+    plan.save_settings(conn, body)
+    return 200, _plan_overview(conn)
+
+
+def api_plan_generate(conn, params, body):
+    result = plan.generate(conn)
+    return 200, {"result": result, **_plan_overview(conn)}
+
+
+def api_plan_day(conn, params, body):
+    day = clock.parse_iso(body.get("date"))
+    if body.get("reset"):
+        plan.reset_day(conn, day)
+    else:
+        plan.edit_day(conn, day, body.get("items"), bool(body.get("rest")))
+    return 200, {"day": schedule.day_detail(conn, day)}
+
+
+def api_calendar(conn, params, body):
+    today = clock.today()
+    text = params.get("month") or clock.iso(today)[:7]
+    year, month = (int(x) for x in text.split("-"))
+    if not 1 <= month <= 12 or not 2000 <= year <= 2100:
+        raise ValueError("달 형식은 2026-11 입니다.")
+    return 200, schedule.month(conn, year, month, today)
+
+
+def api_calendar_day(conn, params, body):
+    return 200, {"day": schedule.day_detail(conn, clock.parse_iso(params.get("date")))}
+
+
 def auth_dispatch(method, path, body, conn, token, local):
     """로그인 없이 부를 수 있는 길(상태, 내용, 쿠키 동작). 쿠키 동작: None | ('set', 토큰) | ('clear',). 로그인 길이 아니면 None."""
     if (method, path) == ("GET", "/api/me"):
@@ -262,6 +326,14 @@ ROUTES = {
     ("GET", "/api/today"): lambda conn, params, body: (200, daily.today_card(conn)),
     ("POST", "/api/settings"): api_settings_save,
     ("POST", "/api/test/clock"): api_test_clock,
+    ("GET", "/api/plan"): api_plan,
+    ("POST", "/api/plan/settings"): api_plan_settings,
+    ("POST", "/api/plan/generate"): api_plan_generate,
+    ("POST", "/api/plan/day"): api_plan_day,
+    ("GET", "/api/calendar"): api_calendar,
+    ("GET", "/api/calendar/day"): api_calendar_day,
+    ("POST", "/api/password"): api_password,
+    ("POST", "/api/users/password"): api_users_password,
     ("GET", "/api/users"): api_users,
     ("POST", "/api/users"): api_users_create,
     ("GET", "/api/glossary_review"): lambda conn, params, body: (200, {"rows": glossary_review.list_rows(conn)}),
@@ -344,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
                 if user is None:
                     status, payload = 401, {"error": "로그인이 필요합니다."}
                 else:
-                    conn.user_id, conn.user = user["id"], user
+                    conn.user_id, conn.user, conn.token = user["id"], user, token
                     status, payload = dispatch(method, path, params, body, conn)
         finally:
             conn.close()

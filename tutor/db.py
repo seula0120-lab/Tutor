@@ -14,7 +14,7 @@ DB_PATH = ROOT / "data" / "tutor.db"
 
 문제은행(questions)·검색 색인(theory_fts)은 bank JSON 에서 다시 만드는 '파생 데이터'라 적재 때 비운다. 모두가 같이 쓴다(용어 사전 검토 glossary_review 도 같이 쓴다).
 개인 기록 표(PERSONAL)는 사람마다 따로 쓴다: 모든 줄에 user_id 가 있고, 조회·저장은 연결의 user_id(conn.user_id)만 다룬다.
-  records·favorites·study_progress·study_review·settings·daily_plan·mock_results
+  records·favorites·study_progress·study_review·settings·daily_plan·mock_results·plans·plan_settings
 적재가 건드리지 않는다(문항 id 는 외래키로 묶지 않는다: 문제은행을 다시 채워도 기록이 남게 하려는 것).
 
 로그인 이전 DB 는 connect 때 자동으로 옮긴다(migrate): user_id 열이 없는 표에 user_id 를 넣고 기존 줄은 user_id = 0('주인 없음')으로 둔다.
@@ -115,6 +115,21 @@ PERSONAL = {
     units   TEXT NOT NULL,              -- JSON 단원 이름 목록(그날 처음 열 때 정해 하루 동안 고정)
     PRIMARY KEY (user_id, day)
 )""",
+    "plans": """CREATE TABLE plans (
+    user_id INTEGER NOT NULL DEFAULT 0,
+    day     INTEGER NOT NULL,           -- clock 의 일 번호
+    kind    TEXT NOT NULL,              -- note / ox / quiz / review / mock / rest(그날 쉬기)
+    unit    TEXT NOT NULL,              -- 단원 이름(복습·모의고사·쉬는 날, 단원 없는 기출은 '')
+    target  INTEGER NOT NULL,           -- 목표 수량(노트는 1, 모의고사는 회수)
+    edited  INTEGER NOT NULL,           -- 1 이면 사람이 고친 줄: 다시 자동 생성해도 그날은 덮어쓰지 않는다
+    PRIMARY KEY (user_id, day, kind, unit)
+)""",
+    "plan_settings": """CREATE TABLE plan_settings (
+    user_id INTEGER NOT NULL DEFAULT 0,
+    key     TEXT NOT NULL,              -- exam_day / start_day(일 번호) / rest_days('0,6' 월=0) / final_days / review_per_day
+    value   TEXT NOT NULL,
+    PRIMARY KEY (user_id, key)
+)""",
     "mock_results": """CREATE TABLE mock_results (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL DEFAULT 0,
@@ -135,6 +150,7 @@ BACKUP_SUFFIX = ".before-login.bak"
 class Connection(sqlite3.Connection):
     """user_id: 이 연결이 다루는 사람(0 = 로그인 전 기록). 개인 기록 표의 모든 조회·저장이 이 값을 쓴다."""
     user_id = 0
+    token = ''        # 지금 쿠키 토큰(내 비밀번호를 바꿀 때 이 세션만 남기려고)
     user = None       # 로그인한 사람(auth 의 사용자 dict). 관리자 확인에 쓴다.
 
 

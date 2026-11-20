@@ -22,14 +22,29 @@
   <div id="createMsg" class="login-error" role="status"></div>
   <button id="createBtn" type="submit">계정 만들기</button>
 </form>
+<form id="resetForm" class="paper login-card" style="margin-top:var(--s4)">
+  <h3>비밀번호 초기화</h3>
+  <p class="small">비밀번호를 잊은 계정에 새 비밀번호를 정해 줍니다. 그 계정의 로그인은 모두 풀립니다.</p>
+  <label for="resetUser">계정</label><select id="resetUser"></select>
+  <label for="resetPassword">새 비밀번호 (8자 이상)</label><input id="resetPassword" type="password" autocomplete="new-password" required>
+  <div id="resetMsg" class="login-error" role="status"></div>
+  <button id="resetBtn" type="submit">초기화</button>
+</form>
 </main>
 <script src="/static/quizcard.js"></script>
 <script>
 mountTopbar("");
 function draw(users) {
+  $("resetUser").replaceChildren(...users.map((u) => el("option", { value: String(u.id), textContent: `${u.username} (${u.name})` })));
   $("userTable").querySelector("tbody").replaceChildren(...users.map((u) => el("tr", {}, el("td", { textContent: u.username }), el("td", { textContent: u.name }), el("td", { textContent: u.is_admin ? "관리자" : "학습자" }))));
 }
 (async () => { const { ok, data } = await api("/api/users"); if (ok) draw(data.users); })();
+$("resetForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const { ok, data } = await api("/api/users/password", { user_id: Number($("resetUser").value), password: $("resetPassword").value });
+  $("resetMsg").textContent = ok ? "비밀번호를 초기화했습니다." : (data.error || "초기화할 수 없습니다.");
+  if (ok) $("resetForm").reset();
+});
 $("createForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const { ok, data } = await api("/api/users", { username: $("newUsername").value, name: $("newName").value, password: $("newPassword").value });

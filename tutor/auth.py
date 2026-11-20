@@ -19,7 +19,7 @@ USERNAME = re.compile(r"^[\w.\-]{3,30}$")
 MIN_PASSWORD = 8
 MAX_PASSWORD = 200
 THROTTLE_FAILS, THROTTLE_SECONDS = 5, 300
-PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results")
+PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results", "plans", "plan_settings")
 
 _failures = {}   # {아이디: [실패 시각]}
 
@@ -154,3 +154,33 @@ def delete_session(conn, token):
     if token:
         with conn:
             conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_token_hash(token),))
+
+
+# ------------------------------------------------------------------ 비밀번호 바꾸기·초기화
+def _check_new_password(password):
+    if not isinstance(password, str) or not MIN_PASSWORD <= len(password) <= MAX_PASSWORD:
+        raise ValueError(f"새 비밀번호는 {MIN_PASSWORD}자 이상이어야 합니다.")
+
+
+def change_password(conn, user_id, current, new, keep_token=None, now=None):
+    """내 비밀번호 바꾸기: 현재 비밀번호를 확인한다(틀리면 LoginError, 로그인과 같은 시도 제한). 다른 기기의 세션은 끊고 지금 세션만 남긴다."""
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if row is None:
+        raise ValueError("없는 계정입니다.")
+    authenticate(conn, row["username"], current, now=now)
+    _check_new_password(new)
+    with conn:
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user_id))
+        conn.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user_id, _token_hash(keep_token) if keep_token else ""))
+
+
+def reset_password(conn, user_id, new):
+    """관리자의 비밀번호 초기화: 그 계정의 로그인 세션을 모두 끊고 시도 제한도 푼다."""
+    row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if row is None:
+        raise ValueError("없는 계정입니다.")
+    _check_new_password(new)
+    with conn:
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new), user_id))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+    _failures.pop(row["username"], None)

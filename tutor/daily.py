@@ -9,7 +9,7 @@
 """
 import json
 
-from . import clock, ox, review, study
+from . import clock, match, ox, plan, review, study
 from .quiz import list_units
 
 DEFAULTS = {"daily_notes": 1, "daily_ox": 20, "daily_questions": 5}
@@ -78,11 +78,40 @@ def _solved_today(conn, today, source_sql, unit_of):
     return counts
 
 
+def _planned_card(conn, today, settings, due):
+    """계획(/plan)이 있으면 그날 계획을 카드로 보여 준다(plans 표 + match 의 실제 대조). 계획 없는 날이면 None."""
+    if not plan.configured(conn):
+        return None
+    report = match.report(conn, today, today)
+    if report["state"] in ("empty",):
+        return None
+    base = {"day": today, "date": clock.iso(today), "settings": settings, "plan": True, "state": report["state"], "pct": report["pct"],
+            "review": {k: due[k] for k in ("due_count", "waiting", "done", "intervals")}}
+    if report["state"] in ("rest", "exam"):
+        return {**base, "tasks": [], "complete": True, "rest": True, "message": "오늘은 시험일입니다." if report["state"] == "exam" else "오늘은 쉬는 날입니다."}
+    tasks = []
+    for item in report["items"]:
+        unit, kind = item["unit"], item["kind"]
+        subject, tax = (study.find_unit(conn, unit)[:2] if unit else ("", ""))
+        need, have = item["need"], item["actual"]
+        shown = f"({min(have, need)}/{need})"
+        detail = {"note": f"{unit} 노트 읽기(읽음·이해함 표시)", "ox": f"{unit} O/X {need}개 {shown}",
+                  "quiz": f"{unit or '단원 무관'} 기출 {need}문제 {shown}",
+                  "review": f"복습 {need}개 {shown}" if need else "오늘 복습할 것이 없습니다.",
+                  "mock": f"모의고사 {need}회 {shown}"}[kind]
+        tasks.append({"key": f"{kind}:{unit}", "kind": kind, "label": item["label"], "unit": unit, "subject": subject, "tax": tax,
+                      "need": need, "have": have, "done": have >= need, "detail": detail})
+    return {**base, "tasks": tasks, "complete": all(t["done"] for t in tasks), "rest": False}
+
+
 def today_plan(conn, today=None):
-    """오늘의 공부 카드: 복습·단원별 할 일과 완료 여부."""
+    """오늘의 공부 카드: 복습·단원별 할 일과 완료 여부. 계획(/plan)이 있으면 그날 계획이 우선한다."""
     today = clock.today() if today is None else today
     settings = get_settings(conn)
     due = review.summary(conn, today)
+    planned = _planned_card(conn, today, settings, due)
+    if planned is not None:
+        return planned
     units = plan_units(conn, today, settings["daily_notes"])
     info = {u: study.find_unit(conn, u) for u in units}
     ox_pool, ox_stats = ox.pool(conn), ox.stats(conn)["units"]
@@ -109,7 +138,7 @@ def today_plan(conn, today=None):
              "done": have_ox >= need_ox, "detail": f"{unit} O/X {need_ox}개 ({min(have_ox, need_ox)}/{need_ox})"},
             {"key": f"quiz:{unit}", "kind": "quiz", "label": "기출", "unit": unit, "subject": subject, "tax": tax, "need": need_q, "have": have_q,
              "done": have_q >= need_q, "detail": f"{unit} 기출 {need_q}문제 ({min(have_q, need_q)}/{need_q})"}]
-    return {"day": today, "date": clock.iso(today), "tasks": tasks, "complete": all(t["done"] for t in tasks), "settings": settings,
+    return {"day": today, "date": clock.iso(today), "tasks": tasks, "complete": all(t["done"] for t in tasks), "settings": settings, "plan": False,
             "review": {k: due[k] for k in ("due_count", "waiting", "done", "intervals")}}
 
 

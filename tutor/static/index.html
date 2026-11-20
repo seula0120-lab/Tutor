@@ -17,6 +17,7 @@
     <button class="tab" data-tab="analysis">문제 분석</button>
     <button class="tab" data-tab="words">단어 주석</button>
     <a class="tab-link" href="/study">공부</a>
+    <a class="tab-link" href="/calendar">캘린더</a>
     <a class="tab-link" href="/toc">목차</a>
   </nav></div>
 </div></header>
@@ -435,13 +436,14 @@ const TASK_HREF = {
   ox: (t) => "/ox?" + query({ subject: t.subject, tax: t.tax, unit: t.unit, count: t.need || 20 }),
   quiz: (t) => "/ox?" + query({ mode: "quiz", subject: t.subject, tax: t.tax, unit: t.unit, count: t.need || 5 }),
   review: () => "/ox?mode=review",
+  mock: () => "/#mock",
 };
 async function loadToday() {
   const { ok, data } = await api("/api/today");
   const card = $("today");
   if (!ok) { card.replaceChildren(); return; }
   const done = data.tasks.filter((t) => t.done).length;
-  const head = el("h2", {}, "오늘의 공부 ", el("span", { id: "todayStatus", className: data.complete ? "today-done" : "small", textContent: data.complete ? "오늘 완료" : `${done}/${data.tasks.length} 완료` }));
+  const head = el("h2", {}, "오늘의 공부 ", el("span", { id: "todayStatus", className: data.complete ? "today-done" : "small", textContent: data.rest ? data.message : data.complete ? "오늘 완료" : `${done}/${data.tasks.length} 완료` }));
   const list = el("ul", { className: "today-list", id: "todayList" });
   for (const t of data.tasks) {
     const row = el("li", { className: "today-row" + (t.done ? " done" : "") });
@@ -475,7 +477,8 @@ async function loadToday() {
   form.append(save, msg);
   settings.append(form);
   card.replaceChildren(head,
-    el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date}`),
+    el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date} · `,
+      el("a", { id: "calendarLink", href: "/calendar", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
     list, week, settings, el("div", { className: "small", id: "todayMsg" }));
 }
 loadToday();
