@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import auth, clock, daily, match, plan, schedule, favorites, glossary_review, mock, ox, quiz, records, review, study
+from . import auth, carry, clock, daily, match, plan, schedule, favorites, glossary_review, mock, ox, quiz, records, review, study, weekly
 from .toc import build_toc
 from .ai import explain
 from .analysis import study_order, unit_profile
@@ -28,7 +28,7 @@ STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/calendar": "calendar.html", "/account": "account.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/calendar": "calendar.html", "/review-week": "review_week.html", "/account": "account.html"}
 LOGIN_PAGE = "login.html"          # 로그인 없이 볼 수 있는 화면은 이것 하나(/login)
 COOKIE = "session"
 ADMIN_PAGES = {"/admin"}
@@ -248,6 +248,23 @@ def api_plan_day(conn, params, body):
     return 200, {"day": schedule.day_detail(conn, day)}
 
 
+def api_carry(conn, params, body):
+    return 200, carry.summary(conn)
+
+
+def api_carry_do(conn, params, body):
+    result = carry.carry_over(conn)
+    return 200, {"result": result, "carry": carry.summary(conn)}
+
+
+def api_review_week(conn, params, body):
+    return 200, weekly.review_week(conn)
+
+
+def api_review_week_add(conn, params, body):
+    return 200, {"result": carry.add_review(conn, str(body.get("unit") or ""))}
+
+
 def api_calendar(conn, params, body):
     today = clock.today()
     text = params.get("month") or clock.iso(today)[:7]
@@ -330,6 +347,10 @@ ROUTES = {
     ("POST", "/api/plan/settings"): api_plan_settings,
     ("POST", "/api/plan/generate"): api_plan_generate,
     ("POST", "/api/plan/day"): api_plan_day,
+    ("GET", "/api/carry"): api_carry,
+    ("POST", "/api/carry"): api_carry_do,
+    ("GET", "/api/review-week"): api_review_week,
+    ("POST", "/api/review-week/add"): api_review_week_add,
     ("GET", "/api/calendar"): api_calendar,
     ("GET", "/api/calendar/day"): api_calendar_day,
     ("POST", "/api/password"): api_password,

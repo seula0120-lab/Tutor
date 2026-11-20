@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>주간 돌아보기 · 회계튜터</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/static/theme.css">
+</head>
+<body>
+<div id="topbar"></div>
+<main>
+<h1>주간 돌아보기</h1>
+<div class="sub"><a href="/calendar">← 캘린더</a> · 주는 일요일부터 토요일, 정답률은 O/X·기출 풀이(확인만 한 기록·모의고사 제외)입니다.</div>
+<section class="paper" id="weakBox" aria-label="약한 단원"></section>
+<div id="weeks"></div>
+</main>
+<script src="/static/quizcard.js"></script>
+<script>
+mountTopbar("calendar");
+const pct = (r) => (r === null ? "-" : Math.round(r * 100) + "%");
+function weekCard(w) {
+  const stat = (label, value) => el("div", { className: "cal-stat" }, el("span", { className: "small", textContent: label }), el("b", { textContent: value }));
+  const rows = w.units.map((u) => el("tr", {}, el("td", { textContent: u.unit }), el("td", { className: "num", textContent: u.n }),
+    el("td", { className: "num", textContent: u.enough ? pct(u.rate) : "표본 부족" })));
+  return el("section", { className: "paper week-card", style: "margin-top:var(--s4)" }, el("h2", { textContent: `${w.label} (${w.from.slice(5)} ~ ${w.to.slice(5)})` }),
+    el("div", { className: "cal-head" }, stat("계획 달성률", w.plan_pct === null ? "-" : w.plan_pct + "%"), stat("공부한 날", `${w.study_days}일`),
+      stat("O/X 정답률", w.ox.n ? `${pct(w.ox.rate)} (${w.ox.right}/${w.ox.n})` : "-"), stat("기출 정답률", w.quiz.n ? `${pct(w.quiz.rate)} (${w.quiz.right}/${w.quiz.n})` : "-")),
+    w.units.length ? el("table", { className: "week-table" }, el("thead", {}, el("tr", {}, ...["단원", "푼 수", "정답률"].map((h) => el("th", { textContent: h })))), el("tbody", {}, ...rows))
+                   : el("div", { className: "small", textContent: "이 주에 푼 O/X·기출이 없습니다." }));
+}
+function weakBox(d) {
+  const box = $("weakBox");
+  box.replaceChildren(el("h2", { textContent: "약한 단원" }), el("div", { className: "small", textContent: `최근 14일(${d.window.from.slice(5)} ~ ${d.window.to.slice(5)}) 풀이가 ${d.min_sample}문제 이상인 단원 중 정답률이 낮은 순 ${d.weak.length}개입니다.` }));
+  if (!d.weak.length) box.append(el("div", { id: "noWeak", className: "small", textContent: `풀이가 ${d.min_sample}문제 이상인 단원이 아직 없어 약한 단원을 정할 수 없습니다.` }));
+  for (const u of d.weak) {
+    const msg = el("span", { className: "small", role: "status" });
+    const btn = el("button", { type: "button", className: "addReview", textContent: "다음 주 계획에 복습 추가" });
+    btn.dataset.unit = u.unit;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      const res = await api("/api/review-week/add", { unit: u.unit });
+      if (!res.ok) { msg.textContent = res.data.error; return; }
+      msg.textContent = `다음 주 ${res.data.result.days}일에 ${res.data.result.total}개를 더했습니다.`;
+    });
+    box.append(el("div", { className: "weak-card", id: "weak-" + d.weak.indexOf(u) }, el("span", {}, el("b", { textContent: u.unit }), ` 정답률 ${pct(u.rate)} (${u.right}/${u.n})`), el("span", {}, btn, " ", msg)));
+  }
+  if (d.insufficient.length) box.append(el("h3", { textContent: "표본 부족(정답률을 내지 않음)" }),
+    el("ul", { id: "fewList" }, ...d.insufficient.map((u) => el("li", { textContent: `${u.unit} — 최근 14일 ${u.n}문제 풀이` }))));
+}
+(async () => {
+  const { ok, data } = await api("/api/review-week");
+  if (!ok) return;
+  weakBox(data);
+  $("weeks").replaceChildren(...data.weeks.map(weekCard));
+})();
+</script>
+</body>
+</html>

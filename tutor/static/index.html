@@ -452,7 +452,8 @@ async function loadToday() {
     const row = el("li", { className: "today-row" + (t.done ? " done" : "") });
     row.dataset.task = t.key;
     const go = el("a", { className: t.done ? "btn ghost-btn" : "btn", href: TASK_HREF[t.kind](t), textContent: t.kind === "review" ? (t.done ? "복습 열기" : "바로 시작") : t.kind === "note" ? "노트 열기" : "시작" });
-    row.append(el("span", { className: "today-check", ariaLabel: t.done ? "완료" : "아직", textContent: t.done ? "✔" : "○" }), el("span", { className: "today-label" }, el("b", { textContent: t.label + " " }), t.detail), go);
+    row.append(el("span", { className: "today-check", ariaLabel: t.done ? "완료" : "아직", textContent: t.done ? "✔" : "○" }), el("span", { className: "today-label" }, el("b", { textContent: t.label + " " }), t.detail,
+      ...(t.carried ? [" ", el("span", { className: "carry-badge", textContent: t.carried_note })] : [])), go);
     list.append(row);
   }
   const pct = (x) => (x.rate === null ? "-" : Math.round(x.rate * 100) + "%");

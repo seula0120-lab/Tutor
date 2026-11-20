@@ -19,7 +19,7 @@ USERNAME = re.compile(r"^[\w.\-]{3,30}$")
 MIN_PASSWORD = 8
 MAX_PASSWORD = 200
 THROTTLE_FAILS, THROTTLE_SECONDS = 5, 300
-PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results", "plans", "plan_settings")
+PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results", "plans", "plan_carry", "plan_settings")
 
 _failures = {}   # {아이디: [실패 시각]}
 

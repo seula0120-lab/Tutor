@@ -37,6 +37,7 @@ const DESIGN_SHOTS = join(SHOTS, "design");
 const STUDY_SHOTS = join(SHOTS, "study");
 const OX_SHOTS = join(SHOTS, "ox");
 const CAL_SHOTS = join(SHOTS, "calendar");
+const CARRY_SHOTS = join(SHOTS, "carry");
 const NUM_SHOTS = join(SHOTS, "numbers");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
@@ -45,6 +46,7 @@ mkdirSync(DESIGN_SHOTS, { recursive: true });
 mkdirSync(STUDY_SHOTS, { recursive: true });
 mkdirSync(OX_SHOTS, { recursive: true });
 mkdirSync(CAL_SHOTS, { recursive: true });
+mkdirSync(CARRY_SHOTS, { recursive: true });
 mkdirSync(NUM_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -979,6 +981,67 @@ async function main() {
     const link = await page.evaluate(`({ text: document.getElementById('calendarLink').textContent, href: document.getElementById('calendarLink').getAttribute('href') })`);
     assert(link.text === "계획 세우기" && link.href === "/plan", "계획이 없으면 카드 링크가 /plan: " + JSON.stringify(link));
     await page.viewport(1100, 900, false);
+  });
+
+  await scenario("이월: 이틀 공부 안 함 → 밀린 것 표시 → 넘기기 → 캘린더·오늘 카드 → 주간 돌아보기 약한 단원 → 복습 추가", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('logoutBtn')`, "관리자 화면");
+    assert(await page.evaluate(`api('/api/users', { username: 'carrier', name: '이월', password: 'carrier-pass-1' }).then((r) => r.ok)`), "carrier 계정 만들기");
+    await logOut();
+    await logIn("carrier", "carrier-pass-1");
+    const exam = await page.evaluate(`(() => { const e = new Date(); e.setDate(e.getDate() + 20); return e.toLocaleDateString('sv-SE'); })()`);
+    await page.evaluate(`api('/api/plan/settings', { exam_date: ${JSON.stringify(exam)}, rest_days: [], final_days: 5 }).then(() => api('/api/plan/generate', {}))`);
+    // 약한 단원 재료: 5문제 이상 푼 단원을 만든다(정답 여부는 상관없다)
+    const solved = await page.evaluate(`(async () => {
+      const units = (await api('/api/plan')).data.units;
+      for (const u of units) {
+        const ids = (await api('/api/quiz_set?' + query({ subject: u.subject, tax: u.tax, unit: u.unit, count: 6 }))).data.ids || [];
+        if (ids.length >= 5) { for (const id of ids) await api('/api/answer', { id, choice: '1' }); return { unit: u.unit, n: ids.length }; }
+      }
+      return null;
+    })()`);
+    assert(solved && solved.n >= 5, "5문제 이상 푼 단원: " + JSON.stringify(solved));
+    await setDay(2);                                                             // 이틀 동안 공부하지 않음
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.getElementById('carryCount')`, "밀린 것 표시");
+    const count = await page.evaluate(`document.getElementById('carryCount').textContent`);
+    assert(/^밀린 것 [1-9]\d*개$/.test(count), "밀린 것 N개: " + count);
+    await page.shotTo("밀린것-light", CARRY_SHOTS);
+    await page.evaluate(`document.getElementById('carryBtn').click(); true`);
+    await page.waitFor(`document.getElementById('carryMsg').textContent.includes('넘겼습니다')`, "넘기기 결과");
+    const left = await page.evaluate(`document.getElementById('carryCount') ? Number(document.getElementById('carryCount').textContent.match(/\\d+/)[0]) : 0`);
+    assert(left < Number(count.match(/\d+/)[0]), `넘긴 뒤 밀린 것이 줄어듦: ${count} → ${left}`);
+    await page.evaluate(`document.querySelector('.cal-cell.today').click(); true`);
+    await page.waitFor(`document.querySelectorAll('#planTable .carry-badge').length >= 1`, "캘린더 상세에 이월 표시");
+    await page.evaluate(`document.querySelector('#dayPanel').scrollIntoView(); true`);
+    await sleep(200);
+    await page.shotTo("넘긴뒤-캘린더", CARRY_SHOTS);
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#todayList .carry-badge').length >= 1`, "오늘 카드 이월 표시");
+    const note = await page.evaluate(`document.querySelector('#todayList .carry-badge').textContent`);
+    assert(note.endsWith("에서 넘어옴"), "카드 표시: " + note);
+    await page.shotTo("오늘카드-이월", CARRY_SHOTS);
+    await page.goto(base + "/calendar");
+    await page.waitFor(`document.getElementById('weekLink')`, "주간 돌아보기 링크");
+    await page.evaluate(`document.getElementById('weekLink').click(); true`);
+    await page.waitFor(`location.pathname === '/review-week' && document.querySelectorAll('.week-card').length === 2`, "주간 돌아보기 화면");
+    await page.waitFor(`document.querySelector('.weak-card .addReview')`, "약한 단원");
+    const weak = await page.evaluate(`document.querySelector('.weak-card b').textContent`);
+    assert(weak === solved.unit, `약한 단원 = 푼 단원: ${weak} / ${solved.unit}`);
+    await page.shotTo("주간-light", CARRY_SHOTS);
+    await page.evaluate(`document.querySelector('.addReview').click(); true`);
+    await page.waitFor(`document.querySelector('.weak-card .small') && document.querySelector('.weak-card .small').textContent.includes('더했습니다')`, "복습 추가 결과");
+    await page.shotTo("복습추가-light", CARRY_SHOTS);
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/review-week");
+    await page.waitFor(`document.querySelectorAll('.week-card').length === 2`, "모바일 주간");
+    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤(주간)");
+    await page.shotTo("주간-mobile", CARRY_SHOTS);
+    await page.viewport(1100, 900, false);
+    await setDay(0);
+    await logOut();
+    await logIn("admin", "admin-pass-1");
   });
 
   await scenario("콘솔 오류가 없다", async () => {

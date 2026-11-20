@@ -78,6 +78,13 @@ def _solved_today(conn, today, source_sql, unit_of):
     return counts
 
 
+def _carried_note(from_dates, today):
+    """넘어온 항목 표시: 어제에서 넘어왔으면 '어제에서 넘어옴', 아니면 '11/18에서 넘어옴'."""
+    yesterday = clock.iso(today - 1)
+    names = ["어제" if d == yesterday else f"{int(d[5:7])}/{int(d[8:])}" for d in from_dates]
+    return ", ".join(names) + "에서 넘어옴"
+
+
 def _planned_card(conn, today, settings, due):
     """계획(/plan)이 있으면 그날 계획을 카드로 보여 준다(plans 표 + match 의 실제 대조). 계획 없는 날이면 None."""
     if not plan.configured(conn):
@@ -100,7 +107,9 @@ def _planned_card(conn, today, settings, due):
                   "review": f"복습 {need}개 {shown}" if need else "오늘 복습할 것이 없습니다.",
                   "mock": f"모의고사 {need}회 {shown}"}[kind]
         tasks.append({"key": f"{kind}:{unit}", "kind": kind, "label": item["label"], "unit": unit, "subject": subject, "tax": tax,
-                      "need": need, "have": have, "done": have >= need, "detail": detail})
+                      "need": need, "have": have, "done": have >= need, "detail": detail,
+                      "carried": item["carried"], "carried_note": _carried_note(item["carried_from"], today) if item["carried"] else "",
+                      "added": item["added"]})
     return {**base, "tasks": tasks, "complete": all(t["done"] for t in tasks), "rest": False}
 
 

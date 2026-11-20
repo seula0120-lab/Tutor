@@ -5,7 +5,7 @@
 """
 from datetime import date
 
-from . import clock, daily, match, plan
+from . import carry, clock, daily, match, plan
 
 
 def _grid_range(year, month):
@@ -18,7 +18,7 @@ def _grid_range(year, month):
 
 def _slim(report, in_month):
     return {"date": report["date"], "day": report["day"], "weekday": report["weekday"], "state": report["state"], "pct": report["pct"],
-            "summary": report["summary"], "edited": report["edited"], "in_month": in_month}
+            "summary": report["summary"], "edited": report["edited"], "carried": report["carried"], "in_month": in_month}
 
 
 def header(conn, today, month_reports):
@@ -27,7 +27,8 @@ def header(conn, today, month_reports):
     return {"today": clock.iso(today), "exam_date": settings["exam_date"],
             "dday": settings["exam_day"] - today if settings["exam_day"] else None,
             "month_pct": round(sum(done) / len(done)) if done else None, "month_days_counted": len(done),
-            "streak": daily.streak(conn, today)}
+            "streak": daily.streak(conn, today),
+            "carry": {k: v for k, v in carry.summary(conn, today).items() if k != "items"}}
 
 
 def month(conn, year, month_number, today=None):

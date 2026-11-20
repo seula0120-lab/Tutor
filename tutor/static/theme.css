@@ -147,6 +147,12 @@ td.num { text-align: right; white-space: nowrap; }
 .numpop { position: fixed; z-index: 50; max-width: min(320px, calc(100vw - 16px)); background: var(--surface); color: inherit; border: 1px solid var(--line); border-radius: var(--s2); box-shadow: 0 6px 20px rgba(0, 0, 0, .18); padding: var(--s2) var(--s3); font-size: 13px; line-height: 1.5; }
 .numpop-head { font-weight: 700; margin-bottom: var(--s1); }
 .numpop-row b { color: var(--muted); font-weight: 600; }
+.carry-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); background: var(--warn-soft); border: 1px solid var(--warn); border-radius: var(--s2); padding: var(--s2) var(--s3); margin: var(--s2) 0; }
+.carry-badge { display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 0 var(--s2); }
+.weak-card { border: 1px solid var(--line); border-radius: var(--s2); padding: var(--s3); margin: var(--s2) 0; display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; justify-content: space-between; }
+.week-table { border-collapse: collapse; width: 100%; font-size: 14px; }
+.week-table th, .week-table td { border-bottom: 1px solid var(--line); padding: var(--s1) var(--s2); text-align: left; }
+.week-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .qtable-wrap { overflow-x: auto; margin: var(--s2) 0; }
 .qtable { border-collapse: collapse; font-size: 14px; background: var(--surface); }
 .qtable th, .qtable td { border: 1px solid var(--line); padding: var(--s1) var(--s2); vertical-align: top; }

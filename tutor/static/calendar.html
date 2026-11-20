@@ -11,7 +11,8 @@
 <main>
 <section class="paper" aria-label="요약">
   <div class="cal-head" id="calHeader"></div>
-  <p class="small"><a id="planLink" href="/plan">계획 세우기·다시 만들기</a> · 날짜를 누르면 그날 계획과 실제 기록이 나란히 보입니다.</p>
+  <div id="carryBar" class="carry-bar" hidden></div>
+  <p class="small"><a id="planLink" href="/plan">계획 세우기·다시 만들기</a> · <a id="weekLink" href="/review-week">주간 돌아보기</a> · 날짜를 누르면 그날 계획과 실제 기록이 나란히 보입니다.</p>
 </section>
 <section class="paper" style="margin-top:var(--s4)">
   <div class="cal-nav">
@@ -51,10 +52,31 @@ function renderHeader(h) {
     stat("연속 공부", `${h.streak}일`, "streakDays"),
     stat("오늘", h.today, "todayDate"));
 }
+function renderCarry(c) {
+  const bar = $("carryBar");
+  bar.hidden = !c || c.count === 0;
+  if (bar.hidden) return;
+  const btn = el("button", { id: "carryBtn", type: "button", textContent: "다음 공부일로 넘기기" });
+  const msg = el("span", { id: "carryMsg", className: "small", role: "status" });
+  btn.disabled = !c.next_date;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    const res = await api("/api/carry", {});
+    if (!res.ok) { msg.textContent = res.data.error; btn.disabled = false; return; }
+    const r = res.data.result;
+    msg.textContent = `${r.placed_total}개 넘겼습니다.` + (r.message ? " " + r.message : "");
+    await loadMonth(cur.year, cur.month, true);
+    $("carryMsg") && ($("carryMsg").textContent = msg.textContent);
+    if (cur.selected) selectDay(cur.selected);
+  });
+  bar.replaceChildren(el("b", { id: "carryCount", textContent: `밀린 것 ${c.count}개` }),
+    el("span", { className: "small", textContent: c.next_date ? ` · 넘길 첫 공부일 ${c.next_date}` : " · 시험 전까지 넘길 공부일이 없습니다" }), btn, msg);
+}
 function renderGrid() {
   const { data } = cur;
   $("monthTitle").textContent = `${data.year}년 ${data.month}월`;
   renderHeader(data.header);
+  renderCarry(data.header.carry);
   const grid = $("calGrid");
   grid.replaceChildren(...DOW.map((n) => el("div", { className: "cal-dow", textContent: n })));
   for (const d of data.days) {
@@ -122,7 +144,8 @@ function renderDay(date, day) {
   const plan = el("div", {}, el("h4", { textContent: "계획" }));
   if (day.items.length) {
     plan.append(el("table", { id: "planTable" }, el("thead", {}, el("tr", {}, ...["항목", "목표", "실제", "달성"].map((h) => el("th", { textContent: h })))),
-      el("tbody", {}, ...day.items.map((i) => el("tr", {}, el("td", { textContent: `${i.label}${i.unit ? " · " + i.unit : ""}${i.edited ? " ✎" : ""}` }),
+      el("tbody", {}, ...day.items.map((i) => el("tr", {}, el("td", { textContent: `${i.label}${i.unit ? " · " + i.unit : ""}${i.edited ? " ✎" : ""}` }, ...(i.carried ? [" ", el("span", { className: "carry-badge", textContent: `이월 +${i.carried} (${i.carried_from.map((x) => x.slice(5)).join(", ")}에서)` })] : []),
+          ...(i.added ? [" ", el("span", { className: "carry-badge", textContent: `약한 단원 복습 +${i.added}` })] : [])),
         el("td", { className: "num", textContent: i.skipped ? "복습할 것 없음" : i.need }), el("td", { className: "num", textContent: i.actual }),
         el("td", { className: "num", textContent: i.pct === null ? "-" : Math.round(i.pct * 100) + "%" }))))));
   } else plan.append(el("div", { className: "small", textContent: day.rest ? "쉬는 날입니다." : day.state === "exam" ? "시험일입니다." : "이 날의 계획이 없습니다." }));
@@ -148,7 +171,7 @@ function editForm(date, day) {
     row.read = () => ({ kind: kind.value, unit: unit.value, target: Number(target.value) });
     rows.append(row);
   };
-  day.items.forEach((i) => addRow({ kind: i.kind, unit: i.unit, target: i.target }));
+  day.items.forEach((i) => { const base = i.target - (i.carried || 0) - (i.added || 0); if (base > 0) addRow({ kind: i.kind, unit: i.unit, target: base }); });   // 넘어온 양·추가한 복습은 따로 저장되니 고치기 칸에는 원래 계획만
   const add = el("button", { type: "button", className: "ghost", id: "addRow", textContent: "항목 더하기" });
   add.addEventListener("click", () => addRow({ kind: "ox", unit: "", target: 10 }));
   const save = el("button", { type: "button", id: "saveDay", textContent: "저장" });

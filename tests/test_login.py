@@ -12,7 +12,7 @@ from tutor import auth, favorites, records
 from tutor.db import BACKUP_SUFFIX, PERSONAL, connect
 from tutor.web import Handler
 
-PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results", "plans", "plan_settings")
+PERSONAL_TABLES = ("records", "favorites", "study_progress", "study_review", "settings", "daily_plan", "mock_results", "plans", "plan_carry", "plan_settings")
 
 
 @pytest.fixture(autouse=True)

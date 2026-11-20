@@ -104,7 +104,7 @@ def match_day(rows, actual, day, today, weekday_rest=False, exam_day=None):
     """날짜 하나의 보고. rows: 그날 계획 줄 [{kind, unit, target, edited}], actual: 그날 실제(actuals 의 값)."""
     plan_rows = [r for r in rows if r["kind"] != "rest"]
     base = {"day": day, "date": clock.iso(day), "weekday": clock.weekday(day), "items": [], "pct": None,
-            "edited": any(r["edited"] for r in rows), "summary": summarize(rows) if rows else "", "actual": actual}
+            "edited": any(r["edited"] for r in rows), "carried": any(r.get("carried") for r in rows), "summary": summarize(rows) if rows else "", "actual": actual}
     if day == exam_day:
         return {**base, "state": "exam", "summary": "시험일"}
     if any(r["kind"] == "rest" for r in rows) or (not rows and weekday_rest):
@@ -116,6 +116,7 @@ def match_day(rows, actual, day, today, weekday_rest=False, exam_day=None):
         have = _item_actual(r["kind"], r["unit"], actual)
         need = min(r["target"], actual["reviewable"]) if r["kind"] == "review" else r["target"]
         items.append({"kind": r["kind"], "label": LABELS[r["kind"]], "unit": r["unit"], "target": r["target"], "need": need, "actual": have,
+                      "carried": r.get("carried", 0), "carried_from": [clock.iso(d) for d in r.get("carried_from", [])], "added": r.get("added", 0),
                       "skipped": need == 0, "pct": None if need == 0 else round(min(have / need, 1.0), 3), "edited": bool(r["edited"])})
     counted = [i["pct"] for i in items if i["pct"] is not None]
     pct = round(100 * sum(counted) / len(counted)) if counted else 100
@@ -135,6 +136,22 @@ def plan_rows_by_day(conn, first, last):
     for r in conn.execute("SELECT day, kind, unit, target, edited FROM plans WHERE user_id = ? AND day BETWEEN ? AND ? ORDER BY day, kind, unit",
                           (conn.user_id, first, last)):
         rows.setdefault(r["day"], []).append(dict(r))
+    # 넘어온 것(carry)·추가한 복습(review)은 같은 항목의 목표에 더한다(실제 기록은 하나라 따로 세면 이중 계산이 된다)
+    for r in conn.execute("SELECT source, from_day, kind, unit, to_day, amount FROM plan_carry WHERE user_id = ? AND to_day BETWEEN ? AND ? ORDER BY to_day, from_day",
+                          (conn.user_id, first, last)):
+        day_rows = rows.setdefault(r["to_day"], [])
+        row = next((x for x in day_rows if x["kind"] == r["kind"] and x["unit"] == r["unit"]), None)
+        if row is None:
+            row = {"day": r["to_day"], "kind": r["kind"], "unit": r["unit"], "target": 0, "edited": 0}
+            day_rows.append(row)
+        row["target"] += r["amount"]
+        if r["source"] == "carry":
+            row["carried"] = row.get("carried", 0) + r["amount"]
+            row.setdefault("carried_from", [])
+            if r["from_day"] not in row["carried_from"]:
+                row["carried_from"].append(r["from_day"])
+        else:
+            row["added"] = row.get("added", 0) + r["amount"]
     return rows
 
 
