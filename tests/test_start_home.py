@@ -107,4 +107,4 @@ def test_planned_card_also_ordered_with_next(db):
 def test_home_hides_question_box_but_keeps_it_at_ask_tab():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
     assert 'id="askBox" hidden' in html and 'id="q"' in html and 'id="ask"' in html          # 기능은 남아 있다
-    assert 'location.hash !== "#ask"' in html
+    assert 'name !== "ask"' in html

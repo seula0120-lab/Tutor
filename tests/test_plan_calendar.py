@@ -66,12 +66,13 @@ def test_generate_rules(db):
     result = plan.generate(db)
     exam = today + EXAM_IN
     days = all_days(db)
-    assert min(days) == today and max(days) == exam - 1                       # 오늘 ~ 시험 전날
+    last = exam - 1 if clock.weekday(exam - 1) != 6 else exam - 2             # 시험 전날이 쉬는 요일(일)이면 그 전 공부일이 마지막(요일에 따라 달라지는 날짜가 있어 고정하지 않는다)
+    assert min(days) == today and max(days) == last                           # 오늘 ~ 시험 전날
     assert not [d for d in days if clock.weekday(d) == 6]                     # 쉬는 요일에는 계획이 없다
     final = [d for d in days if d >= exam - 5]
     assert final and all({"review"} <= {r["kind"] for r in rows(db, d)} for d in final)
     assert any(r["kind"] == "mock" for d in final for r in rows(db, d))
-    assert [r["kind"] for r in rows(db, exam - 1)] == ["review"]               # 시험 전날은 복습만
+    assert last != exam - 1 or [r["kind"] for r in rows(db, exam - 1)] == ["review"]      # 시험 전날(쉬는 요일이 아닐 때)은 복습만
     assert not [r for d in days if d < exam - 5 for r in rows(db, d) if r["kind"] == "mock"]
     assert result["final_days"] == len(final) and result["to"] == clock.iso(exam - 1)
     assert all(r["edited"] == 0 for d in days for r in rows(db, d))
@@ -250,10 +251,10 @@ def test_plan_api_routes(db):
 def test_pages_and_tabs_exist():
     from pathlib import Path
     static = Path(__file__).resolve().parent.parent / "tutor" / "static"
-    for name in ("plan.html", "calendar.html", "account.html"):
+    for name in ("plan.html", "account.html", "nav.js"):          # 캘린더는 plan.html 아래로 합쳐졌다(calendar.html 없음)
         assert (static / name).exists()
-    assert '"calendar", "캘린더"' in (static / "quizcard.js").read_text(encoding="utf-8")
-    assert 'href="/calendar"' in (static / "index.html").read_text(encoding="utf-8")
+    assert not (static / "calendar.html").exists() and 'id="calendar"' in (static / "plan.html").read_text(encoding="utf-8")
+    assert 'href: data.plan ? "/plan#calendar" : "/plan"' in (static / "index.html").read_text(encoding="utf-8")
 
 
 def test_change_password_and_admin_reset(db):
@@ -346,12 +347,7 @@ def test_today_card_total_is_split_across_units(db):
     assert sum(t["need"] for t in card["tasks"] if t["kind"] == "quiz") <= 5
 
 
-def test_top_tabs_have_plan_before_calendar_and_card_links_to_plan_when_no_plan():
+def test_card_links_to_plan_when_no_plan_and_to_plan_calendar_otherwise():
     static = Path(__file__).resolve().parent.parent / "tutor" / "static"
-    js = (static / "quizcard.js").read_text(encoding="utf-8")
-    assert '["study", "공부"], ["plan", "계획"], ["calendar", "캘린더"], ["toc", "목차"]' in js
     html = (static / "index.html").read_text(encoding="utf-8")
-    assert 'href="/plan">계획</a>' in html
-    assert 'href: data.plan ? "/calendar" : "/plan"' in html
-    css = (static / "theme.css").read_text(encoding="utf-8")
-    assert "@media (min-width: 561px)" in css and "flex-wrap: wrap" in css          # 데스크톱 폭에서는 탭이 줄바꿈, 모바일만 가로 스크롤
+    assert 'href: data.plan ? "/plan#calendar" : "/plan"' in html          # 메뉴 구조는 tests/test_nav.py

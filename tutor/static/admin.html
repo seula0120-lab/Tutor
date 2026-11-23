@@ -32,8 +32,8 @@
 </form>
 </main>
 <script src="/static/quizcard.js"></script>
+<script src="/static/nav.js"></script>
 <script>
-mountTopbar("");
 function draw(users) {
   $("resetUser").replaceChildren(...users.map((u) => el("option", { value: String(u.id), textContent: `${u.username} (${u.name})` })));
   $("userTable").querySelector("tbody").replaceChildren(...users.map((u) => el("tr", {}, el("td", { textContent: u.username }), el("td", { textContent: u.name }), el("td", { textContent: u.is_admin ? "관리자" : "학습자" }))));

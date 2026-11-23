@@ -63,7 +63,7 @@ def test_toc_page_and_index_link_over_http(tmp_path, conn):
     try:
         toc_page = opener.open(base + "/toc").read().decode()
         assert "문제 목차" in toc_page and "renderCard" in toc_page and "/static/quizcard.js" in toc_page
-        assert 'href="/toc"' in opener.open(base + "/").read().decode()
+        assert '/toc' in opener.open(base + "/static/nav.js").read().decode()
         data = json.loads(opener.open(base + "/api/toc").read())
         assert data["toc"][0]["subject"] == "재무회계"
     finally:

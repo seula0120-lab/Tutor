@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>계획 세우기 · 회계튜터</title>
+<title>계획·캘린더 · 회계튜터</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/static/theme.css">
 </head>
@@ -11,14 +11,14 @@
 <main>
 <section class="paper">
   <h2>계획 세우기</h2>
-  <p class="small">시험일과 공부 시작일, 쉬는 요일을 넣으면 복귀 순서대로 단원을 남은 날짜에 나눠 날짜별 계획을 만듭니다. '이해함'으로 표시한 단원은 뒤로 미루고, 시험 직전 며칠은 모의고사·복습 위주로 둡니다. 직접 고친 날은 다시 만들어도 덮어쓰지 않습니다. 계획은 <a href="/calendar">캘린더</a>에서 실제 기록과 맞춰 봅니다.</p>
+  <p class="small">시험일과 공부 시작일, 쉬는 요일을 넣으면 복귀 순서대로 단원을 남은 날짜에 나눠 날짜별 계획을 만듭니다. '이해함'으로 표시한 단원은 뒤로 미루고, 시험 직전 며칠은 모의고사·복습 위주로 둡니다. 직접 고친 날은 다시 만들어도 덮어쓰지 않습니다. 계획은 아래 <a href="#calendar">캘린더</a>에서 실제 기록과 맞춰 봅니다.</p>
   <div class="plan-form" id="planForm">
     <label>시험일 <input type="date" id="examDate" required></label>
     <label>공부 시작일 (비우면 오늘부터) <input type="date" id="startDate"></label>
     <div><b>쉬는 요일</b><div class="days" id="restDays"></div></div>
     <label>마무리 기간(일) — 시험 직전 모의고사·복습 위주 <input type="number" id="finalDays" min="0" max="30"></label>
     <label>하루 복습 개수 <input type="number" id="reviewPerDay" min="0" max="50"></label>
-    <div class="small">하루 분량(첫 화면 '하루 분량 설정'과 같은 값): 노트는 하루 최대 개수, O/X·기출은 그날 단원들에 나눠 담는 하루 전체 목표입니다.</div>
+    <div class="small">하루 분량 설정(첫 화면 오늘의 공부 카드가 이 값을 씁니다): 노트는 하루 최대 개수, O/X·기출은 그날 단원들에 나눠 담는 하루 전체 목표입니다.</div>
     <div class="row">
       <label>노트 수 <input type="number" id="dailyNotes" min="1" max="5"></label>
       <label>O/X <input type="number" id="dailyOx" min="5" max="50"></label>
@@ -32,12 +32,33 @@
   <h3>날짜별 계획</h3>
   <table id="planDays"><thead><tr><th>날짜</th><th>상태</th><th>계획</th></tr></thead><tbody></tbody></table>
 </section>
+<div id="calendar" style="scroll-margin-top:72px">
+<h2 class="page-h2">캘린더</h2>
+<section class="paper" aria-label="요약">
+  <div class="cal-head" id="calHeader"></div>
+  <div id="carryBar" class="carry-bar" hidden></div>
+  <p class="small"><a id="weekLink" href="/review-week">주간 돌아보기</a> · 날짜를 누르면 그날 계획과 실제 기록이 나란히 보입니다.</p>
+</section>
+<section class="paper" style="margin-top:var(--s4)">
+  <div class="cal-nav">
+    <button id="prevMonth" class="ghost" aria-label="이전 달">◀</button>
+    <h2 id="monthTitle"></h2>
+    <button id="nextMonth" class="ghost" aria-label="다음 달">▶</button>
+    <button id="goToday" class="ghost">오늘</button>
+  </div>
+  <div class="legend" aria-label="색 설명"><span style="background:var(--ok-soft)">완료</span><span style="background:var(--warn-soft)">부분</span><span style="background:var(--bad-soft)">미달</span><span style="background:var(--accent-soft)">예정</span><span style="border-style:dashed">쉬는 날</span><span style="background:var(--accent);color:var(--on-accent)">시험일</span></div>
+  <div class="week-nav" id="weekNav"><button id="prevWeek" class="ghost" aria-label="이전 주">◀ 이전 주</button><span id="weekTitle" class="small"></span><button id="nextWeek" class="ghost" aria-label="다음 주">다음 주 ▶</button></div>
+  <div class="cal-grid" id="calGrid" role="grid" style="margin-top:var(--s2)"></div>
+  <div class="week-list" id="weekList"></div>
+</section>
+<section class="paper" id="dayPanel" style="margin-top:var(--s4)" hidden></section>
+</div>
 </main>
 <script src="/static/quizcard.js"></script>
+<script src="/static/nav.js"></script>
 <script>
-mountTopbar("calendar");
 const NAMES = ["월", "화", "수", "목", "금", "토", "일"];
-const STATE_LABEL = { done: "완료", partial: "부분", missed: "미달", rest: "쉬는 날", future: "예정", exam: "시험일", empty: "-" };
+const PLAN_STATE_LABEL = { done: "완료", partial: "부분", missed: "미달", rest: "쉬는 날", future: "예정", exam: "시험일", empty: "-" };
 const restBoxes = NAMES.map((n, i) => { const c = el("input", { type: "checkbox", value: String(i) }); $("restDays").append(el("label", {}, c, " " + n)); return c; });
 function fill(data) {
   const s = data.settings;
@@ -46,8 +67,8 @@ function fill(data) {
   $("finalDays").value = s.final_days; $("reviewPerDay").value = s.review_per_day;
   $("dailyNotes").value = data.daily.daily_notes; $("dailyOx").value = data.daily.daily_ox; $("dailyQuestions").value = data.daily.daily_questions;
   $("planDays").querySelector("tbody").replaceChildren(...data.days.map((d) => {
-    const link = el("a", { href: "/calendar?date=" + d.date, textContent: `${d.date.slice(5)} (${NAMES[d.weekday]})` });
-    const row = el("tr", {}, el("td", {}, link), el("td", { textContent: (STATE_LABEL[d.state] || "") + (d.pct !== null && d.state !== "future" ? ` ${d.pct}%` : "") + (d.edited ? " ✎" : "") }), el("td", { textContent: d.summary }));
+    const link = el("a", { href: "/plan?date=" + d.date + "#calendar", textContent: `${d.date.slice(5)} (${NAMES[d.weekday]})` });
+    const row = el("tr", {}, el("td", {}, link), el("td", { textContent: (PLAN_STATE_LABEL[d.state] || "") + (d.pct !== null && d.state !== "future" ? ` ${d.pct}%` : "") + (d.edited ? " ✎" : "") }), el("td", { textContent: d.summary }));
     row.dataset.date = d.date; return row;
   }));
 }
@@ -72,6 +93,178 @@ $("generate").addEventListener("click", async () => {
   if (new URLSearchParams(location.search).get("from") === "start") setTimeout(() => { location.href = "/"; }, 1500);   // 시작하기 → 계획 → 홈
 });
 (async () => { const { ok, data } = await api("/api/plan"); if (ok) fill(data); })();
+</script>
+
+<script>
+const STATE_LABEL = { done: "완료", partial: "부분", missed: "미달", rest: "쉬는 날", future: "예정", exam: "시험일", empty: "" };
+const DOW = ["일", "월", "화", "수", "목", "금", "토"];
+const KIND_LABEL = { note: "노트", ox: "O/X", quiz: "기출", review: "복습", mock: "모의고사" };
+let cur = { year: 0, month: 0, data: null, selected: null, weekIndex: 0 };
+let units = [];
+const isoToDate = (iso) => new Date(iso + "T00:00:00");
+const stateText = (d) => (d.state === "done" || d.state === "partial" || d.state === "missed" ? `${STATE_LABEL[d.state]} ${d.pct}%` : STATE_LABEL[d.state] || "");
+
+function cellText(d, tag) {
+  const day = Number(d.date.slice(8));
+  return [el("span", { className: "d", textContent: tag === "week" ? `${Number(d.date.slice(5, 7))}/${day} (${DOW[(d.weekday + 1) % 7]})` : String(day) }),
+          el("span", { className: "sum", textContent: d.summary }), el("span", { className: "st", textContent: stateText(d) })];
+}
+function renderHeader(h) {
+  const stat = (label, value, id) => el("div", { className: "cal-stat" }, el("span", { className: "small", textContent: label }), el("b", { id, textContent: value }));
+  $("calHeader").replaceChildren(
+    stat("시험까지", h.dday === null ? "시험일 미정" : h.dday === 0 ? "D-day" : `D-${h.dday}`, "dday"),
+    stat("이번 달 달성률", h.month_pct === null ? "-" : `${h.month_pct}%`, "monthPct"),
+    stat("연속 공부", `${h.streak}일`, "streakDays"),
+    stat("오늘", h.today, "todayDate"));
+}
+function renderCarry(c) {
+  const bar = $("carryBar");
+  bar.hidden = !c || c.count === 0;
+  if (bar.hidden) return;
+  const btn = el("button", { id: "carryBtn", type: "button", textContent: "다음 공부일로 넘기기" });
+  const msg = el("span", { id: "carryMsg", className: "small", role: "status" });
+  btn.disabled = !c.next_date;
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    const res = await api("/api/carry", {});
+    if (!res.ok) { msg.textContent = res.data.error; btn.disabled = false; return; }
+    const r = res.data.result;
+    msg.textContent = `${r.placed_total}개 넘겼습니다.` + (r.message ? " " + r.message : "");
+    await loadMonth(cur.year, cur.month, true);
+    $("carryMsg") && ($("carryMsg").textContent = msg.textContent);
+    if (cur.selected) selectDay(cur.selected);
+  });
+  bar.replaceChildren(el("b", { id: "carryCount", textContent: `밀린 것 ${c.count}개` }),
+    el("span", { className: "small", textContent: c.next_date ? ` · 넘길 첫 공부일 ${c.next_date}` : " · 시험 전까지 넘길 공부일이 없습니다" }), btn, msg);
+}
+function renderGrid() {
+  const { data } = cur;
+  $("monthTitle").textContent = `${data.year}년 ${data.month}월`;
+  renderHeader(data.header);
+  renderCarry(data.header.carry);
+  const grid = $("calGrid");
+  grid.replaceChildren(...DOW.map((n) => el("div", { className: "cal-dow", textContent: n })));
+  for (const d of data.days) {
+    const cell = el("button", { className: "cal-cell" + (d.in_month ? "" : " out") + (d.date === data.today ? " today" : "") + (d.date === cur.selected ? " sel" : ""), type: "button" }, ...cellText(d, "cell"));
+    cell.dataset.date = d.date; cell.dataset.state = d.state;
+    cell.setAttribute("aria-label", `${d.date} ${d.summary} ${stateText(d)}`);
+    cell.addEventListener("click", () => selectDay(d.date));
+    grid.append(cell);
+  }
+  renderWeek();
+}
+function renderWeek() {
+  const { data } = cur;
+  const weeks = Math.floor(data.days.length / 7);
+  cur.weekIndex = Math.max(0, Math.min(cur.weekIndex, weeks - 1));
+  const days = data.days.slice(cur.weekIndex * 7, cur.weekIndex * 7 + 7);
+  $("weekTitle").textContent = `${days[0].date.slice(5)} ~ ${days[6].date.slice(5)}`;
+  $("weekList").replaceChildren(...days.map((d) => {
+    const row = el("button", { className: "week-row" + (d.date === data.today ? " today" : "") + (d.date === cur.selected ? " sel" : ""), type: "button" }, ...cellText(d, "week"));
+    row.dataset.date = d.date; row.dataset.state = d.state;
+    row.addEventListener("click", () => selectDay(d.date));
+    return row;
+  }));
+}
+async function loadMonth(year, month, keepWeek) {
+  const { ok, data } = await api(`/api/calendar?month=${year}-${String(month).padStart(2, "0")}`);
+  if (!ok) return;
+  cur.year = data.year; cur.month = data.month; cur.data = data;
+  if (!keepWeek) {
+    const idx = data.days.findIndex((d) => d.date === (cur.selected || data.today));
+    cur.weekIndex = idx >= 0 ? Math.floor(idx / 7) : 0;
+  }
+  renderGrid();
+}
+function shiftMonth(delta, weekIndex) {
+  let y = cur.year, m = cur.month + delta;
+  if (m < 1) { m = 12; y -= 1; } else if (m > 12) { m = 1; y += 1; }
+  return loadMonth(y, m, weekIndex !== undefined).then(() => { if (weekIndex === -1) { cur.weekIndex = Math.floor(cur.data.days.length / 7) - 1; renderWeek(); } else if (weekIndex === 0) { cur.weekIndex = 0; renderWeek(); } });
+}
+$("prevMonth").addEventListener("click", () => { cur.selected = null; shiftMonth(-1); });
+$("nextMonth").addEventListener("click", () => { cur.selected = null; shiftMonth(1); });
+$("goToday").addEventListener("click", () => { cur.selected = null; const t = cur.data.today; loadMonth(Number(t.slice(0, 4)), Number(t.slice(5, 7))).then(() => selectDay(t)); });
+$("prevWeek").addEventListener("click", () => { if (cur.weekIndex > 0) { cur.weekIndex -= 1; renderWeek(); } else shiftMonth(-1, -1); });
+$("nextWeek").addEventListener("click", () => { if (cur.weekIndex < cur.data.days.length / 7 - 1) { cur.weekIndex += 1; renderWeek(); } else shiftMonth(1, 0); });
+
+// ------------------------------------------------------------------ 날짜 상세: 계획 ↔ 실제
+async function selectDay(date) {
+  cur.selected = date;
+  document.querySelectorAll(".cal-cell, .week-row").forEach((n) => n.classList.toggle("sel", n.dataset.date === date));
+  const { ok, data } = await api("/api/calendar/day?date=" + date);
+  if (ok) renderDay(date, data.day);
+}
+function actualList(a) {
+  const li = (text) => el("li", { textContent: text });
+  const items = [li(`기출 ${a.quiz.n}문항 (정답 ${a.quiz.right})`), li(`O/X ${a.ox.n}문장 (정답 ${a.ox.right})`),
+    li(a.notes.length ? `읽은 노트: ${a.notes.join(", ")}` : "읽은 노트 없음"),
+    li(a.mocks.length ? "모의고사: " + a.mocks.map((m) => `${m.score}/${m.max}점`).join(", ") : "모의고사 없음"), li(`복습한 문항 ${a.review}개`)];
+  return el("ul", { id: "actualList" }, ...items);
+}
+function renderDay(date, day) {
+  const panel = $("dayPanel");
+  panel.hidden = false;
+  const d = isoToDate(date);
+  const title = el("h3", { id: "dayTitle", textContent: `${date} (${DOW[d.getDay()]}) ` }, el("span", { className: "small", id: "dayState", textContent: stateText(day) }));
+  const plan = el("div", {}, el("h4", { textContent: "계획" }));
+  if (day.items.length) {
+    plan.append(el("table", { id: "planTable" }, el("thead", {}, el("tr", {}, ...["항목", "목표", "실제", "달성"].map((h) => el("th", { textContent: h })))),
+      el("tbody", {}, ...day.items.map((i) => el("tr", {}, el("td", { textContent: `${i.label}${i.unit ? " · " + i.unit : ""}${i.edited ? " ✎" : ""}` }, ...(i.carried ? [" ", el("span", { className: "carry-badge", textContent: `이월 +${i.carried} (${i.carried_from.map((x) => x.slice(5)).join(", ")}에서)` })] : []),
+          ...(i.added ? [" ", el("span", { className: "carry-badge", textContent: `약한 단원 복습 +${i.added}` })] : [])),
+        el("td", { className: "num", textContent: i.skipped ? "복습할 것 없음" : i.need }), el("td", { className: "num", textContent: i.actual }),
+        el("td", { className: "num", textContent: i.pct === null ? "-" : Math.round(i.pct * 100) + "%" }))))));
+  } else plan.append(el("div", { className: "small", textContent: day.rest ? "쉬는 날입니다." : day.state === "exam" ? "시험일입니다." : "이 날의 계획이 없습니다." }));
+  panel.replaceChildren(title, el("div", { className: "day-split" }, plan, el("div", {}, el("h4", { textContent: "실제 기록" }), actualList(day.actual))));
+  if (day.editable) panel.append(editForm(date, day));
+}
+function editForm(date, day) {
+  const box = el("details", { id: "editBox", style: "margin-top:12px" }, el("summary", { textContent: "이 날 계획 고치기" }));
+  const rows = el("div", { id: "editRows" });
+  const rest = el("input", { type: "checkbox", id: "restCheck", checked: day.rest });
+  const msg = el("div", { className: "small", id: "editMsg", role: "status" });
+  const addRow = (item) => {
+    const kind = el("select", { ariaLabel: "항목 종류" }, ...Object.entries(KIND_LABEL).map(([k, l]) => el("option", { value: k, textContent: l })));
+    kind.value = item.kind;
+    const unit = el("select", { ariaLabel: "단원" }, el("option", { value: "", textContent: "(단원 무관)" }), ...units.map((u) => el("option", { value: u.unit, textContent: `${u.subject}${u.tax ? "›" + u.tax : ""} › ${u.unit}` })));
+    unit.value = item.unit || "";
+    const target = el("input", { type: "number", min: "1", max: "200", value: String(item.target || 1), ariaLabel: "목표 수량" });
+    const del = el("button", { type: "button", className: "ghost", textContent: "빼기" });
+    const row = el("div", { className: "edit-row" }, kind, unit, target, del);
+    const sync = () => { unit.hidden = kind.value === "review" || kind.value === "mock"; target.hidden = kind.value === "note"; };
+    kind.addEventListener("change", sync); sync();
+    del.addEventListener("click", () => row.remove());
+    row.read = () => ({ kind: kind.value, unit: unit.value, target: Number(target.value) });
+    rows.append(row);
+  };
+  day.items.forEach((i) => { const base = i.target - (i.carried || 0) - (i.added || 0); if (base > 0) addRow({ kind: i.kind, unit: i.unit, target: base }); });   // 넘어온 양·추가한 복습은 따로 저장되니 고치기 칸에는 원래 계획만
+  const add = el("button", { type: "button", className: "ghost", id: "addRow", textContent: "항목 더하기" });
+  add.addEventListener("click", () => addRow({ kind: "ox", unit: "", target: 10 }));
+  const save = el("button", { type: "button", id: "saveDay", textContent: "저장" });
+  const reset = el("button", { type: "button", className: "ghost", id: "resetDay", textContent: "자동 계획으로 되돌리기" });
+  const send = async (body, done) => {
+    const res = await api("/api/plan/day", { date, ...body });
+    if (!res.ok) { msg.textContent = res.data.error; return; }
+    if (done) await done();
+    await loadMonth(cur.year, cur.month, true);
+    await selectDay(date);
+    $("editMsg") && ($("editMsg").textContent = "저장했습니다.");
+  };
+  save.addEventListener("click", () => send(rest.checked ? { rest: true } : { items: [...rows.children].map((r) => r.read()) }));
+  reset.addEventListener("click", () => send({ reset: true }, () => api("/api/plan/generate", {})));
+  box.append(el("label", { className: "small" }, rest, " 이 날은 쉬기"), rows, el("div", { className: "edit-row" }, add, save, reset),
+    el("div", { className: "small", textContent: "고친 날은 계획을 다시 만들어도 덮어쓰지 않습니다(✎ 표시)." }), msg);
+  return box;
+}
+
+(async () => {
+  const overview = await api("/api/plan");
+  if (overview.ok) units = overview.data.units;
+  const wanted = new URLSearchParams(location.search).get("date");
+  const base = wanted || (overview.ok ? overview.data.today : new Date().toISOString().slice(0, 10));
+  cur.selected = wanted;
+  await loadMonth(Number(base.slice(0, 4)), Number(base.slice(5, 7)));
+  if (wanted) selectDay(wanted);
+})();
 </script>
 </body>
 </html>

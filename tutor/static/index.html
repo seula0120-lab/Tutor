@@ -7,21 +7,7 @@
 <link rel="stylesheet" href="/static/theme.css">
 </head>
 <body>
-<header class="topbar"><div class="topbar-inner">
-  <a class="brand" href="/">회계튜터<small>전산세무 1급 이론</small></a>
-  <div class="tabs-wrap"><nav class="tabs" aria-label="화면 이동">
-    <button class="tab active" data-tab="ask">질문</button>
-    <button class="tab" data-tab="answers">기출 답안</button>
-    <button class="tab" data-tab="notebook">오답노트</button>
-    <button class="tab" data-tab="mock">모의고사</button>
-    <button class="tab" data-tab="analysis">문제 분석</button>
-    <button class="tab" data-tab="words">단어 주석</button>
-    <a class="tab-link" href="/study">공부</a>
-    <a class="tab-link" href="/plan">계획</a>
-    <a class="tab-link" href="/calendar">캘린더</a>
-    <a class="tab-link" href="/toc">목차</a>
-  </nav></div>
-</div></header>
+<div id="topbar"></div>
 <main>
 <div id="ask-panel" class="panel active">
 <section id="today" class="box today-card" aria-label="오늘의 공부"></section>
@@ -108,17 +94,23 @@
 
 </main>
 <script src="/static/quizcard.js"></script>
+<script src="/static/nav.js"></script>
 <script>
-// ---- 탭 ----
-document.querySelectorAll(".tab").forEach((tab) => tab.addEventListener("click", () => {
-  document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
-  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === tab.dataset.tab || p.id === tab.dataset.tab + "-panel"));
-  history.replaceState(null, "", "#" + tab.dataset.tab);
-  $("askBox").hidden = location.hash !== "#ask";                                  // 질문 입력창은 '질문' 탭(/#ask)에서만 보인다. 홈(/)은 오늘의 공부가 주인공
-  revealActiveTab();
-}));
-function revealActiveTab() { const nav = document.querySelector(".tabs"); scrollTabIntoView(nav); }
-function showTab(name) { document.querySelector(`.tab[data-tab="${name}"]`).click(); }
+// ---- 화면 전환: 해시로 연다. 해시 없는 / 는 홈(오늘의 공부), /#ask 는 질문창, 나머지는 각 패널(/#answers 등). 메뉴는 nav.js 가 그린다. ----
+const PANELS = ["answers", "notebook", "mock", "analysis", "words"];
+function showTab(name) {                                         // 코드에서 직접 열 때도 주소(해시)를 맞춘다
+  const target = PANELS.includes(name) ? name : name === "ask" ? "ask" : "";
+  history.replaceState(null, "", location.pathname + location.search + (target ? "#" + target : ""));
+  applyHash();
+}
+function applyHash() {
+  const name = location.hash.slice(1);
+  const panel = PANELS.includes(name) ? name : "ask";               // ask-panel = 오늘의 공부 + (#ask 일 때만) 질문창
+  document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === panel || p.id === panel + "-panel"));
+  if (name === "notebook") loadNotebook();                           // 패널을 열 때마다 새로 불러오는 것들
+  if (name === "mock") loadMockHistory();
+  $("askBox").hidden = name !== "ask";                              // 질문 입력창은 /#ask 에서만 보인다. 홈(/)은 오늘의 공부가 주인공
+}
 
 // ---- 질문창 ----
 let lastAsk = { q: "", scope: "all" };
@@ -360,7 +352,6 @@ async function loadNotebook() {
 }
 $("nbSubject").addEventListener("change", loadNotebook);
 $("nbUnit").addEventListener("change", loadNotebook);
-document.querySelector('.tab[data-tab="notebook"]').addEventListener("click", loadNotebook);
 
 // ---- 모의고사 탭 ----
 let mockAnswers = {};
@@ -434,7 +425,6 @@ async function loadMockHistory(known) {
       el("td", { className: "num", textContent: h.diff === null ? "-" : (h.diff > 0 ? "+" : "") + h.diff })));
   }
 }
-document.querySelector('.tab[data-tab="mock"]').addEventListener("click", () => loadMockHistory());
 
 // ------------------------------------------------------------------ 오늘의 공부 카드(첫 화면 맨 위)
 const TASK_HREF = {
@@ -467,40 +457,19 @@ async function loadToday() {
     el("td", { className: "num", textContent: d.quiz.n ? `${pct(d.quiz)} (${d.quiz.right}/${d.quiz.n})` : "-" })));
   const week = el("details", { className: "today-week" }, el("summary", { textContent: "지난 7일 기록" }),
     el("table", { id: "weekTable" }, el("thead", {}, el("tr", {}, el("th", { textContent: "날짜" }), el("th", { textContent: "O/X 정답률" }), el("th", { textContent: "기출 정답률" }))), el("tbody", {}, ...bars)));
-  const settings = el("details", { className: "today-settings" }, el("summary", { textContent: "하루 분량 설정" }));
-  const inputs = {};
-  const labels = { daily_notes: ["노트 수", 1, 5], daily_ox: ["O/X 개수", 5, 50], daily_questions: ["기출 개수", 1, 30] };
-  const form = el("div", { className: "row" });
-  for (const [key, [label, min, max]] of Object.entries(labels)) {
-    inputs[key] = el("input", { type: "number", id: "set-" + key, min: String(min), max: String(max), value: String(data.settings[key]), ariaLabel: label });
-    form.append(el("label", { className: "small" }, label + " ", inputs[key]));
-  }
-  const save = el("button", { id: "settingsSave", className: "ghost", textContent: "저장" });
-  const msg = el("span", { className: "small", id: "settingsMsg" });
-  save.addEventListener("click", async () => {
-    const res = await api("/api/settings", Object.fromEntries(Object.entries(inputs).map(([k, i]) => [k, i.value])));
-    if (!res.ok) { msg.textContent = res.data.error; return; }
-    await loadToday();
-    $("todayMsg").textContent = "하루 분량을 저장했습니다.";
-  });
-  form.append(save, msg);
-  settings.append(form);
+  const settings = el("div", { className: "small today-settings-link" }, el("a", { id: "settingsLink", href: "/plan", textContent: "분량 설정은 계획에서" }), " (하루 노트·O/X·기출 개수)");
   const unitLine = data.units.length ? el("div", { id: "todayUnits", className: "today-units" }, "오늘 단원: ",
     ...data.units.flatMap((u, i) => [i ? " · " : "", el("b", { textContent: u.unit }), ` (${u.subject}${u.tax ? " · " + u.tax : ""})`])) : null;
   card.replaceChildren(head, ...(unitLine ? [unitLine] : []),
     el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date} · `,
-      el("a", { id: "calendarLink", href: data.plan ? "/calendar" : "/plan", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
+      el("a", { id: "calendarLink", href: data.plan ? "/plan#calendar" : "/plan", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
     list, week, settings, el("div", { className: "small", id: "todayMsg" }));
 }
 loadToday();
 
 loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); renderRecent(); loadFavorites();
-function tabFromHash() { if (document.querySelector(`.tab[data-tab="${location.hash.slice(1)}"]`)) showTab(location.hash.slice(1)); }   // 다른 화면의 탭 링크(/#answers 등)
-tabFromHash();
-if (!location.hash) document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));   // 홈: 탭이 아니라 '오늘의 공부' 화면
-window.addEventListener("hashchange", tabFromHash);
-watchTabOverflow(document.querySelector(".tabs"));
-revealActiveTab();
+applyHash();
+addEventListener("hashchange", applyHash);
 </script>
 </body>
 </html>

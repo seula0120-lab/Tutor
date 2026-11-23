@@ -24,13 +24,15 @@ from .sync import format_report, sync_raw
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
 # 주소 → (static 폴더의 파일, 내용 종류). 이 목록에 있는 파일만 내보낸다.
-STATIC_FILES = {"/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8"),
+STATIC_FILES = {"/static/nav.js": ("nav.js", "text/javascript; charset=utf-8"),
+                "/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8"),
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다
 # 화면(HTML) 주소 → static 폴더의 파일
-PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/calendar": "calendar.html", "/review-week": "review_week.html", "/start": "start.html", "/account": "account.html"}
+PAGES = {"/": "index.html", "/index.html": "index.html", "/toc": "toc.html", "/glossary-review": "glossary_review.html", "/study": "study.html", "/study-changes": "tax_changes.html", "/ox": "ox.html", "/admin": "admin.html", "/plan": "plan.html", "/review-week": "review_week.html", "/start": "start.html", "/account": "account.html"}
 LOGIN_PAGE = "login.html"          # 로그인 없이 볼 수 있는 화면은 이것 하나(/login)
 COOKIE = "session"
+REDIRECTS = {"/calendar": "/plan#calendar"}                       # 캘린더는 계획 화면 아래로 합쳐졌다
 ADMIN_PAGES = {"/admin"}
 LOCAL_ADDRESSES = ("127.0.0.1", "::1")
 SUMMARY_LIMIT = 20  # 요약 카드가 '관련 기출'로 보는 검색 상위 후보 수
@@ -403,7 +405,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_bytes(200, (STATIC_DIR / STATIC_FILES[url.path][0]).read_bytes(), STATIC_FILES[url.path][1])
         if path.startswith("/study/"):                       # /study/<단원>: 같은 화면이 주소의 단원 이름을 읽는다
             path = "/study"
-        if path == "/login" or path in PAGES:
+        if path == "/login" or path in PAGES or path in REDIRECTS:
             conn = connect(self.db_path)
             try:
                 user = auth.user_for_token(conn, self._token())
@@ -416,6 +418,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._redirect("/login")
             if path in ADMIN_PAGES and not user["is_admin"]:
                 return self._redirect("/")
+            if path in REDIRECTS:                      # 합쳐진 화면의 옛 주소: 로그인 확인 뒤 새 위치로(쿼리는 유지)
+                target, _, fragment = REDIRECTS[path].partition("#")
+                return self._redirect(target + (("?" + url.query) if url.query else "") + ("#" + fragment if fragment else ""))
             return self._send_bytes(200, (STATIC_DIR / PAGES[path]).read_bytes(), "text/html; charset=utf-8")
         if not url.path.startswith("/api/"):
             return self._send_json(404, {"error": "없는 주소입니다."})

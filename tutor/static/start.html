@@ -27,8 +27,8 @@
 </section>
 </main>
 <script src="/static/quizcard.js"></script>
+<script src="/static/nav.js"></script>
 <script>
-mountTopbar("start");
 (async () => {
   const { ok, data } = await api("/api/start");
   if (!ok) return;

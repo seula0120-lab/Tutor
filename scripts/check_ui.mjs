@@ -39,6 +39,7 @@ const OX_SHOTS = join(SHOTS, "ox");
 const CAL_SHOTS = join(SHOTS, "calendar");
 const CARRY_SHOTS = join(SHOTS, "carry");
 const START_SHOTS = join(SHOTS, "start");
+const NAV_SHOTS = join(SHOTS, "nav");
 const NUM_SHOTS = join(SHOTS, "numbers");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
@@ -49,6 +50,7 @@ mkdirSync(OX_SHOTS, { recursive: true });
 mkdirSync(CAL_SHOTS, { recursive: true });
 mkdirSync(CARRY_SHOTS, { recursive: true });
 mkdirSync(START_SHOTS, { recursive: true });
+mkdirSync(NAV_SHOTS, { recursive: true });
 mkdirSync(NUM_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -123,9 +125,21 @@ async function connectPage(port) {
     return `${name}.png`;
   };
   const key = async (name) => { for (const type of ["rawKeyDown", "keyUp"]) await send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: ({ Escape: 27, Enter: 13, Tab: 9 })[name] || 9 }); };
+  const KEYS = { Enter: [13, "\r"], " ": [32, " "], Escape: [27], Tab: [9], ArrowDown: [40] };
+  const press = async (name) => {                                  // 키보드 조작(Enter·Space 는 text 를 실어 버튼이 눌리게 한다)
+    const [code, text] = KEYS[name];
+    await send("Input.dispatchKeyEvent", { type: text ? "keyDown" : "rawKeyDown", key: name, code: name === " " ? "Space" : name, windowsVirtualKeyCode: code, text });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: name, code: name === " " ? "Space" : name, windowsVirtualKeyCode: code });
+    await sleep(80);
+  };
+  const hover = async (selector) => {                              // 마우스를 올려만 둔다(hover 로 메뉴가 열리면 안 됨)
+    const r = await evaluate(`(() => { const b = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; })()`);
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: r.x, y: r.y });
+    await sleep(250);
+  };
   const emulate = (features) => send("Emulation.setEmulatedMedia", { features });      // 예: [{name:"prefers-color-scheme", value:"dark"}]
   const viewport = (width, height, mobile) => send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile });
-  return { evaluate, waitFor, goto, screenshot, pixels, shotTo, emulate, key, studyDir: STUDY_SHOTS, oxDir: OX_SHOTS, viewport, errors };
+  return { evaluate, waitFor, goto, screenshot, pixels, shotTo, emulate, key, press, hover, studyDir: STUDY_SHOTS, oxDir: OX_SHOTS, viewport, errors };
 }
 
 // 128회 1번 같은 문항의 정답 번호(들): 로컬 기출 파일에서 읽는다(화면에는 풀기 전에 정답이 없으므로 점검 스크립트만 안다).
@@ -143,7 +157,7 @@ async function scenario(name, fn) {
 const assert = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 async function lookup(page, round, number) {
-  await page.evaluate(`document.querySelector('.tab[data-tab="answers"]').click();
+  await page.evaluate(`showTab('answers');
     document.getElementById('lkRound').value = '${round}'; document.getElementById('lkNumber').value = '${number}';
     document.getElementById('lkGo').click(); true`);
   await page.waitFor(`document.querySelectorAll('#card .choice').length > 0 && document.getElementById('card').textContent.includes('${round}회 ${number}번')`, `${round}회 ${number}번 카드`);
@@ -195,7 +209,7 @@ async function main() {
   });
 
   await scenario("단어 주석을 누르면 쉬운 풀이가 나온다", async () => {
-    await page.evaluate(`document.querySelector('.tab[data-tab="words"]').click();
+    await page.evaluate(`showTab('words');
       document.getElementById('wdRound').value = '128'; document.getElementById('wdNumber').value = '1';
       document.getElementById('wdGo').click(); true`);
     await page.waitFor(`document.querySelector('#wdCard .term')`, "밑줄 친 용어");
@@ -205,14 +219,14 @@ async function main() {
   });
 
   await scenario("오답노트에 방금 틀린 128회 1번이 보인다", async () => {
-    await page.evaluate(`document.querySelector('.tab[data-tab="notebook"]').click(); true`);
+    await page.evaluate(`showTab('notebook'); true`);
     await page.waitFor(`document.getElementById('nbList').textContent.includes(${JSON.stringify(wrongId)})`, "오답노트 목록");
     assert(await page.evaluate(`!document.getElementById('nbList').textContent.includes(${JSON.stringify(rightId)})`), "맞힌 문항이 오답노트에 있음");
     await page.screenshot("notebook");
   });
 
   await scenario("모의고사 제출 → 점수가 나온다", async () => {
-    await page.evaluate(`document.querySelector('.tab[data-tab="mock"]').click(); document.getElementById('mockStart').click(); true`);
+    await page.evaluate(`showTab('mock'); document.getElementById('mockStart').click(); true`);
     await page.waitFor(`document.querySelectorAll('#mockBody .hit').length === 15`, "15문항");
     await page.evaluate(`document.querySelectorAll('#mockBody .hit').forEach((h) => h.querySelector('.choice').click()); document.getElementById('mockSubmit').click(); true`);
     await page.waitFor(`document.getElementById('mockResult') && /점수 \\d+ \\/ 30점/.test(document.getElementById('mockResult').textContent)`, "점수");
@@ -255,11 +269,11 @@ async function main() {
     await page.screenshot("mobile-toc");
     await page.goto(base + "/");
     for (const tab of ["ask", "analysis", "answers", "words", "notebook", "mock"]) {
-      await page.evaluate(`document.querySelector('.tab[data-tab="${tab}"]').click(); true`);
+      await page.evaluate(`showTab('${tab}'); true`);
       await sleep(400);
       if ((await overflow()) > 0) bad.push(`홈/${tab}`);
     }
-    await page.evaluate(`document.querySelector('.tab[data-tab="ask"]').click(); document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
+    await page.evaluate(`showTab('ask'); document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
     await page.waitFor(`document.getElementById('answer').textContent.includes('주제 요약 카드')`, "요약 카드(모바일)");
     if ((await overflow()) > 0) bad.push("홈/요약 카드");
     await page.screenshot("mobile-summary");
@@ -276,7 +290,7 @@ async function main() {
   const tokens = () => page.evaluate(`(() => { const s = getComputedStyle(document.documentElement); const o = {};
     for (const n of ["bg","surface","paper","note","text","muted","accent","on-accent","ok","ok-soft","bad","bad-soft","warn","warn-soft","accent-soft","mark","mark-text"]) o[n] = s.getPropertyValue("--" + n).trim(); return o; })()`);
   const bodyBg = () => page.evaluate(`getComputedStyle(document.body).backgroundColor`);
-  const tab = (name) => page.evaluate(`document.querySelector('.tab[data-tab="${name}"]').click(); true`);
+  const tab = (name) => page.evaluate(`showTab('${name}'); true`);
 
   await scenario("theme.css 토큰: 라이트·다크 팔레트와 글 대비 AA(4.5:1)", async () => {
     await page.viewport(1100, 900, false);
@@ -304,10 +318,9 @@ async function main() {
   await scenario("공통 구조: 고정 상단 바·알약 탭 순서·글꼴·세 화면이 theme.css 사용", async () => {
     await page.goto(base + "/");
     assert((await page.evaluate(`getComputedStyle(document.querySelector('.topbar')).position`)) === "sticky", "상단 바가 sticky 가 아님");
-    const labels = await page.evaluate(`[...document.querySelectorAll('.topbar .tabs > *')].map((n) => n.textContent.trim())`);
-    const order = ["질문", "기출 답안", "오답노트", "모의고사", "문제 분석"];
-    assert(order.every((l, i) => labels[i] === l) && labels[labels.length - 1] === "목차" && labels[labels.length - 2] === "캘린더", "탭 순서가 다름: " + labels.join(" · "));
-    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tab')).borderRadius`)) === "999px", "알약 모양이 아님");
+    const labels = await page.evaluate(`[...document.querySelectorAll('.topbar .nav-groups .nav-btn')].map((n) => n.textContent.replace('', '').trim())`);
+    assert(labels.join() === "홈,배우기,풀기,복습,계획", "그룹 순서가 다름: " + labels.join(" · "));
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.nav-btn')).borderRadius`)) === "999px", "알약 모양이 아님");
     await page.waitFor(`Promise.all([document.fonts.load('16px Pretendard', '가'), document.fonts.load('600 16px "Noto Serif KR"', '가')]).then((r) => r.every((x) => x.length > 0))`, "번들 글꼴 로드");
     for (const path of ["/", "/toc", "/glossary-review"]) {
       await page.goto(base + path);
@@ -363,7 +376,7 @@ async function main() {
     const ring = await page.evaluate(`(() => { const b = document.activeElement; const s = getComputedStyle(b); return { tag: b.id, width: s.outlineWidth, style: s.outlineStyle }; })()`);
     assert(ring.style !== "none" && parseFloat(ring.width) >= 2, "초점 링이 보이지 않음: " + JSON.stringify(ring));
     await page.emulate([{ name: "prefers-reduced-motion", value: "reduce" }]);
-    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tab')).transitionDuration`)).split(",").every((v) => parseFloat(v) === 0), "움직임 줄이기에서 전환이 남아 있음");
+    assert((await page.evaluate(`getComputedStyle(document.querySelector('.nav-btn')).transitionDuration`)).split(",").every((v) => parseFloat(v) === 0), "움직임 줄이기에서 전환이 남아 있음");
     await page.emulate([{ name: "prefers-reduced-motion", value: "no-preference" }, { name: "prefers-color-scheme", value: "dark" }]);
     await page.viewport(390, 844, true);
     const bad = [];
@@ -377,33 +390,10 @@ async function main() {
     await page.viewport(1100, 900, false);
   });
 
-  await scenario("모바일 탭 줄: 오른쪽 그라데이션·현재 탭 자동 스크롤", async () => {
-    await page.viewport(390, 844, true);
-    await page.goto(base + "/");
-    const more = () => page.evaluate(`document.querySelector('.tabs-wrap').classList.contains('more')`);
-    await page.waitFor(`document.querySelector('.tabs').scrollWidth > document.querySelector('.tabs').clientWidth`, "탭 줄이 가로로 넘침");
-    assert(await more(), "처음에는 오른쪽에 더 있다는 그라데이션이 켜져야 함");
-    assert((await page.evaluate(`getComputedStyle(document.querySelector('.tabs')).webkitMaskImage`)).includes("linear-gradient"), "오른쪽 가장자리 페이드(마스크) 없음");
-    await tab("words");
-    const visible = `(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab.active').getBoundingClientRect(); return a.left >= n.left - 1 && a.right <= n.right + 1; })()`;
-    await page.waitFor(visible, "현재 탭(단어 주석)이 보이도록 스크롤");
-    await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more') || document.querySelector('.tabs').scrollLeft > 0`, "스크롤 후 상태 갱신");
-    await page.waitFor(`document.querySelector('.tabs-wrap').classList.contains('more-left') === (document.querySelector('.tabs').scrollLeft > 2)`, "스크롤하면 왼쪽 그라데이션도 켜짐");
-    assert(await page.evaluate(`document.querySelector('.tabs').scrollLeft > 2 ? getComputedStyle(document.querySelector('.tabs')).webkitMaskImage.includes('linear-gradient') : true`), "왼쪽 가장자리 페이드(마스크)가 없음");
-    assert(await page.evaluate(`(() => { const brand = document.querySelector('.brand').getBoundingClientRect(), w = document.querySelector('.tabs-wrap').getBoundingClientRect(); return w.left >= brand.right - 1 && getComputedStyle(document.querySelector('.tabs-wrap')).overflowX === 'hidden'; })()`), "탭 줄이 로고 영역을 침범함");
-    await page.evaluate(`document.querySelector('.tabs').scrollLeft = 0; true`);
-    await page.waitFor(`!document.querySelector('.tabs-wrap').classList.contains('more-left')`, "맨 왼쪽에서는 왼쪽 그라데이션이 꺼짐");
-    await page.goto(base + "/toc");                                       // 목차 화면: 목차 탭이 활성이고 보여야 한다
-    await page.waitFor(`(() => { const n = document.querySelector('.tabs').getBoundingClientRect(), a = document.querySelector('.tab-link.active').getBoundingClientRect(); return a.right <= n.right + 1 && a.left >= n.left - 1; })()`, "목차 탭이 보임");
-    await page.goto(base + "/#mock");
-    await page.waitFor(`document.querySelector('.tab.active').dataset.tab === 'mock'`, "해시 링크로 모의고사 탭 열림");
-    await page.viewport(1100, 900, false);
-  });
-
   await scenario("공부: 탭 → 재무 단원 노트 → 읽음 체크 → 진도율 반영 → 5문제 풀기", async () => {
     await page.viewport(1100, 900, false);
     await page.goto(base + "/");
-    await page.evaluate(`document.querySelector('.topbar .tab-link[href="/study"]').click(); true`);
+    await page.evaluate(`document.querySelector('.topbar .nav-btn[data-group="learn"]').click(); document.querySelector('#menu-learn a[href="/study"]').click(); true`);
     await page.waitFor(`location.pathname === '/study' && document.querySelectorAll('#subjects .subject-card').length === 3`, "과목 카드 3개");
     const cardText = (subject) => `(document.querySelector('.subject-card[data-subject="${subject}"] .progress-text') || {}).textContent || ''`;
     const labels = await page.evaluate(`[...document.querySelectorAll('.subject-card h2')].map((h) => h.textContent)`);
@@ -520,6 +510,8 @@ async function main() {
   });
 
   // ---- O/X · 간격 복습 · 오늘의 공부. 서버 시계를 /api/test/clock 으로 하루씩 넘긴다(점검 서버만 열려 있음).
+  let calN = 0;
+  const gotoCal = () => page.goto(base + "/plan?cal=" + (++calN) + "#calendar");     // 같은 주소로 다시 열어도 새로 불러오도록 쿼리를 바꾼다(해시만 같으면 새로고침이 안 됨)
   const setDay = (days) => page.evaluate(`fetch('/api/test/clock', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ days: ${days} }) }).then((r) => r.json())`);
   const getJson = (path) => page.evaluate(`fetch(${JSON.stringify(path)}).then((r) => r.json())`);
   const postJson = (path, body) => page.evaluate(`fetch(${JSON.stringify(path)}, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(${JSON.stringify(body)}) }).then((r) => r.json())`);
@@ -577,8 +569,14 @@ async function main() {
     assert(await page.evaluate(`document.getElementById('todayStatus').textContent !== '오늘 완료' && !document.querySelector('#todayList [data-task="review"]')`), "복습만 끝난 상태가 아님(복습 줄이 없어야 함)");
     assert((await page.evaluate(`document.getElementById('todayMeta').textContent`)).includes("예정된 복습") && (await page.evaluate(`document.getElementById('todayMeta').textContent`)).includes("아직 날짜 안 됨"), "예정된 복습 표시 없음");
     assert(await page.evaluate(`document.getElementById('weekTable').querySelectorAll('tbody tr').length === 7 && /\\d+일/.test(document.getElementById('streakDays').textContent)`), "지난 7일·연속 일수 표시 없음");
-    await page.evaluate(`document.querySelector('.today-settings summary').click(); document.getElementById('set-daily_ox').value = '5'; document.getElementById('set-daily_questions').value = '2'; document.getElementById('settingsSave').click(); true`);
-    await page.waitFor(`document.getElementById('todayMsg').textContent.includes('저장')`, "설정 저장");
+    assert(await page.evaluate(`!document.querySelector('.today-settings summary') && document.getElementById('settingsLink').getAttribute('href') === '/plan'`), "첫 화면에는 분량 설정 대신 '계획에서' 링크만");
+    await page.goto(base + "/plan");                                            // 하루 분량 설정은 계획 화면에서
+    await page.waitFor(`document.getElementById('dailyOx') && document.getElementById('dailyOx').value !== ''`, "계획 화면 분량 칸");
+    await page.evaluate(`api('/api/settings', { daily_ox: '5', daily_questions: '2' }).then((r) => r.ok)`);   // (이 계정은 시험일이 없어 '설정 저장' 버튼은 시험일 오류가 나므로 분량만 API 로 저장)
+    await page.goto(base + "/plan?daily=1");
+    await page.waitFor(`document.getElementById('dailyOx').value === '5' && document.getElementById('dailyQuestions').value === '2'`, "계획 화면에 바뀐 분량이 보임");
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#todayList .today-row').length >= 3`, "오늘의 공부 카드");
     assert(await page.evaluate(`document.querySelector('#todayList [data-task^="ox:"]').textContent.includes('O/X 5개') && document.querySelector('#todayList [data-task^="quiz:"]').textContent.includes('2문제')`), "바꾼 하루 분량이 카드에 반영되지 않음");
     const card = await getJson("/api/today");
     const unit = card.tasks.find((t) => t.kind === "note").unit;
@@ -665,7 +663,7 @@ async function main() {
     await page.waitFor(`location.pathname === '/login'`, "로그인으로 이동");
     await logIn("student1", "student-pass-1");
     assert(await page.evaluate(`document.getElementById('userName').textContent === '학생1' && !document.getElementById('adminLink')`), "학생 계정 표시/관리자 링크");
-    await page.evaluate(`document.querySelector('.tab[data-tab="notebook"]').click(); true`);
+    await page.evaluate(`showTab('notebook'); true`);
     await page.waitFor(`document.getElementById('nbList').textContent.includes('오답노트가 비어 있습니다.')`, "새 계정 오답노트 비어 있음");
     await page.screenshot("account-student-notebook");
     await page.goto(base + "/admin");                                       // 관리자 화면은 관리자만
@@ -698,7 +696,7 @@ async function main() {
     await sleep(200);
     await page.shotTo("계획-light", CAL_SHOTS);
 
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
     assert((await page.evaluate(`document.getElementById('dday').textContent`)) === "D-14", "D-day");
     const today = await page.evaluate(`document.getElementById('todayDate').textContent`);
@@ -721,7 +719,7 @@ async function main() {
       return tasks.length;
     })()`);
     assert((await doIt(["note"])) >= 3, "오늘 계획 항목이 3개 이상");
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
     assert((await cellState(today)) === "partial", "오늘 부분: " + (await cellState(today)));
     await page.goto(base + "/");
@@ -729,7 +727,7 @@ async function main() {
     assert(await page.evaluate(`document.querySelector('#todayList .today-row.done') && document.querySelector('#todayList .today-row:not(.done)') && document.getElementById('calendarLink').textContent.includes('캘린더')`), "카드: 일부 완료");
 
     await doIt(["ox", "quiz"]);
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
     assert((await cellState(today)) === "done", "오늘 완료: " + (await cellState(today)));
     await page.evaluate(`document.querySelector('.cal-cell.today').click(); true`);
@@ -745,7 +743,7 @@ async function main() {
     await page.waitFor(`document.getElementById('generate')`, "계획 화면");
     await page.evaluate(`document.getElementById('generate').click(); true`);
     await page.waitFor(`document.getElementById('planMsg').textContent.includes('직접 고친 날 1일 유지')`, "다시 만들기: 고친 날 유지");
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
     assert((await cellState(plus2)) === "rest", "고친 날은 다시 만든 뒤에도 쉬는 날");
     assert((await cellState(today)) === "done", "오늘은 다시 만든 뒤에도 완료(한 일이 있는 오늘은 건드리지 않음)");
@@ -760,7 +758,7 @@ async function main() {
     await page.shotTo("캘린더-dark", CAL_SHOTS);
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(390, 844, true);
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.querySelectorAll('#weekList .week-row').length === 7`, "모바일 주간 목록");
     assert(await page.evaluate(`getComputedStyle(document.getElementById('calGrid')).display === 'none' && getComputedStyle(document.getElementById('weekList')).display === 'block'`), "모바일은 주간 목록");
     assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "모바일 가로 스크롤");
@@ -771,7 +769,7 @@ async function main() {
 
     // 다음 날로 넘기기: 어제는 완료, 오늘은 새 계획
     await setDay(1);
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.querySelector('.cal-cell.today')`, "달력");
     assert((await page.evaluate(`document.getElementById('dday').textContent`)) === "D-13", "D-day 하루 줄어듦");
     assert((await cellState(today)) === "done", "어제는 완료");
@@ -808,56 +806,6 @@ async function main() {
   // 상단 바 구성(로고·탭 줄·계정 버튼)이 어떻게 바뀌어도 잡는 검사: ① 로고·탭 줄·계정 버튼 영역이 서로 겹치지 않고
   // ② 탭 줄 안팎의 빈틈(로고~탭 줄, 탭 줄~계정 버튼)과 잘린 가장자리 안쪽 8px 에 글자 조각이 비치지 않는다(화면 조각의 색이 배경과 같다).
   // 예전 검사는 '탭 줄 왼쪽 >= 로고 오른쪽' 좌표만 봤기 때문에, 탭 줄 안에서 잘려 비치는 글자 조각은 통과했다.
-  await scenario("상단 바: 로고·탭·계정 버튼이 겹치지 않고 잘린 탭 글자 조각이 비치지 않는다(모바일·데스크톱·라이트·다크, 스크롤 위치별)", async () => {
-    const colorDiff = (a, b) => Math.max(...a.map((v, i) => Math.abs(v - b[i])));
-    const problems = [];
-    const probe = async (label) => {
-      const g = await page.evaluate(`(() => {
-        const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect(); return { l: b.left, r: b.right, t: b.top, b: b.bottom }; };
-        const nav = document.querySelector('.tabs'), wrap = document.querySelector('.tabs-wrap');
-        return { brand: r(document.querySelector('.topbar .brand')), wrap: r(wrap), user: r(document.querySelector('.topbar .userbox')), bar: r(document.querySelector('.topbar')),
-                 overflow: getComputedStyle(wrap).overflowX, left: nav.scrollLeft > 2, right: nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 2 };
-      })()`);
-      const narrow = await page.evaluate(`window.innerWidth <= 560`);
-      if (narrow && g.overflow !== "hidden") problems.push(`${label}: 모바일은 탭 줄 바깥을 잘라야 함`);
-      if (!narrow && (g.overflow !== "visible" || g.left || g.right)) problems.push(`${label}: 데스크톱 폭에서는 탭이 잘리지 않고 줄바꿈되어야 함`);
-      if (g.brand.r > g.wrap.l + 0.5) problems.push(`${label}: 로고와 탭 줄이 겹침`);
-      if (g.user && g.wrap.r > g.user.l + 0.5) problems.push(`${label}: 탭 줄과 계정 버튼이 겹침`);
-      const top = Math.ceil(g.bar.t) + 6, height = Math.max(8, Math.floor(g.bar.b - g.bar.t) - 14);
-      const regions = [["로고~탭 줄 빈틈과 왼쪽 가장자리", g.brand.r + 1, g.wrap.l + (g.left ? 8 : 0)]];
-      if (g.right) regions.push(["탭 줄 오른쪽 가장자리~계정 버튼", g.wrap.r - 8, g.user ? g.user.l - 1 : g.wrap.r]);
-      else if (g.user) regions.push(["탭 줄~계정 버튼 빈틈", g.wrap.r + 1, g.user.l - 1]);
-      for (const [name, from, to] of regions) {
-        const x = Math.ceil(from), width = Math.floor(to) - x;
-        if (width < 2) continue;
-        const img = await page.pixels(x, top, width, height), ref = img.px(0, 0);
-        let worst = 0;
-        for (let yy = 0; yy < img.height; yy++) for (let xx = 0; xx < img.width; xx++) worst = Math.max(worst, colorDiff(img.px(xx, yy), ref));
-        if (worst > 12) problems.push(`${label}: ${name}에 글자 조각이 비침(색 차이 ${worst})`);
-      }
-    };
-    const pages = ["/", "/study", "/toc", "/calendar", "/plan", "/account", "/admin"];
-    const variants = [[390, 844, true, "light", "모바일"], [1100, 900, false, "light", "데스크톱"], [390, 844, true, "dark", "모바일 다크"], [320, 640, true, "light", "아주 좁은 모바일"]];
-    for (const [w, h, mobile, scheme, name] of variants) {
-      await page.viewport(w, h, mobile);
-      await page.emulate([{ name: "prefers-color-scheme", value: scheme }]);
-      for (const path of pages) {
-        await page.goto(base + path);
-        await page.waitFor(`document.querySelector('.topbar .tabs') && document.querySelector('.topbar .userbox')`, "상단 바 계정 버튼");
-        await sleep(500);
-        for (const pos of ["0", "mid", "max"]) {
-          await page.evaluate(`(() => { const n = document.querySelector('.tabs'); n.style.scrollBehavior = 'auto'; n.scrollLeft = ${pos === "0" ? 0 : pos === "mid" ? "(n.scrollWidth - n.clientWidth) / 2" : "n.scrollWidth"}; return true; })()`);
-          await sleep(250);
-          await probe(`${name} ${path} 스크롤 ${pos}`);
-        }
-      }
-    }
-    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
-    await page.viewport(1100, 900, false);
-    assert(!problems.length, problems.slice(0, 6).join(" | ") + (problems.length > 6 ? ` … 외 ${problems.length - 6}건` : ""));
-  });
-
-  // ---- 강사님 피드백 ②: 표가 표로 보이고, 세무 문장에 시행일 기준·수치 대상/기준일·개정 전 배지가 보인다.
   await scenario("표가 있는 문항이 표로 보임(머리글·칸 병합 유지, 문제 화면·O/X 데이터)", async () => {
     await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
     await page.viewport(1100, 900, false);
@@ -958,34 +906,6 @@ async function main() {
     assert(q.subject === "세무회계" && q.exam_basis === "2026년 8월 시행 시험 기준", "세무 문항에 시험 기준 문구: " + JSON.stringify([q.subject, q.exam_basis]));
   });
 
-  await scenario("노트북·데스크톱 폭에서 모든 탭(계획·캘린더·목차 포함)이 화면 안에 보이고, 계획 없는 오늘의 공부 카드 링크는 /plan", async () => {
-    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
-    for (const width of [1000, 1280]) {
-      await page.viewport(width, 800, false);
-      for (const path of ["/", "/study", "/calendar", "/plan", "/ox", "/toc"]) {
-        await page.goto(base + path);
-        await page.waitFor(`document.querySelectorAll('.topbar .tab, .topbar .tab-link').length >= 10`, `탭 ${path}`);
-        const r = await page.evaluate(`(() => {
-          const tabs = [...document.querySelectorAll('.topbar .tab, .topbar .tab-link')];
-          const labels = tabs.map((t) => t.textContent.trim());
-          const out = tabs.filter((t) => { const b = t.getBoundingClientRect(); return b.width === 0 || b.left < 0 || b.right > window.innerWidth || b.top < 0 || b.bottom > document.querySelector('.topbar').getBoundingClientRect().bottom + 1; }).map((t) => t.textContent.trim());
-          const plan = tabs.find((t) => t.textContent.trim() === '계획');
-          return { labels, out, planHref: plan && plan.getAttribute('href'), scroll: document.documentElement.scrollWidth <= window.innerWidth + 1 };
-        })()`);
-        for (const need of ["계획", "캘린더", "목차", "공부"]) assert(r.labels.includes(need), `${width}px ${path}: '${need}' 탭이 없음 ${JSON.stringify(r.labels)}`);
-        assert(r.out.length === 0, `${width}px ${path}: 화면 밖으로 잘린 탭 ${JSON.stringify(r.out)}`);
-        assert(r.planHref === "/plan" && r.scroll, `${width}px ${path}: 계획 탭 링크/가로 스크롤 ${JSON.stringify(r)}`);
-      }
-    }
-    await page.viewport(1000, 800, false);
-    await page.goto(base + "/");
-    await page.shotTo("탭-1000", NUM_SHOTS);
-    await page.waitFor(`document.getElementById('calendarLink')`, "오늘의 공부 카드 링크");
-    const link = await page.evaluate(`({ text: document.getElementById('calendarLink').textContent, href: document.getElementById('calendarLink').getAttribute('href') })`);
-    assert(link.text === "계획 세우기" && link.href === "/plan", "계획이 없으면 카드 링크가 /plan: " + JSON.stringify(link));
-    await page.viewport(1100, 900, false);
-  });
-
   await scenario("이월: 이틀 공부 안 함 → 밀린 것 표시 → 넘기기 → 캘린더·오늘 카드 → 주간 돌아보기 약한 단원 → 복습 추가", async () => {
     await page.viewport(1100, 900, false);
     await page.goto(base + "/");
@@ -1006,7 +926,7 @@ async function main() {
     })()`);
     assert(solved && solved.n >= 5, "5문제 이상 푼 단원: " + JSON.stringify(solved));
     await setDay(2);                                                             // 이틀 동안 공부하지 않음
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.getElementById('carryCount')`, "밀린 것 표시");
     const count = await page.evaluate(`document.getElementById('carryCount').textContent`);
     assert(/^밀린 것 [1-9]\d*개$/.test(count), "밀린 것 N개: " + count);
@@ -1027,7 +947,7 @@ async function main() {
     assert(note.endsWith("에서 넘어옴"), "카드 표시: " + note);
     assert(await page.evaluate(`![...document.querySelectorAll('#todayList .today-row')].some((r) => r.textContent.startsWith('복습') && r.querySelector('.carry-badge'))`), "복습 이월 없음(오늘 카드)");
     await page.shotTo("오늘카드-이월", CARRY_SHOTS);
-    await page.goto(base + "/calendar");
+    await gotoCal();
     await page.waitFor(`document.getElementById('weekLink')`, "주간 돌아보기 링크");
     await page.evaluate(`document.getElementById('weekLink').click(); true`);
     await page.waitFor(`location.pathname === '/review-week' && document.querySelectorAll('.week-card').length === 2`, "주간 돌아보기 화면");
@@ -1105,6 +1025,147 @@ async function main() {
     await page.waitFor(`location.pathname === '/' && document.getElementById('todayList')`, "계획 있는 사용자 → 바로 홈");
     await logOut();
     await logIn("admin", "admin-pass-1");
+  });
+
+  await scenario("상단 메뉴: 그룹 5개가 모든 화면에 같고, 드롭다운은 클릭·키보드로 열리고 Esc·바깥 클릭으로 닫힘(hover 로는 안 열림)", async () => {
+    await page.viewport(1100, 900, false);
+    const ready = `document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 5 && document.getElementById('userName')`;
+    const groupLabels = `[...document.querySelectorAll('.topbar .nav-groups .nav-btn')].map((n) => n.textContent.replace('', '').trim()).join()`;
+    for (const path of ["/", "/study", "/ox", "/toc", "/plan", "/review-week", "/account", "/start"]) {
+      await page.goto(base + path);
+      await page.waitFor(ready, `메뉴 ${path}`);
+      assert((await page.evaluate(groupLabels)) === "홈,배우기,풀기,복습,계획", `${path}: 그룹이 다름`);
+      assert(await page.evaluate(`document.querySelectorAll('.topbar').length === 1 && !document.querySelector('.topbar .tab, .topbar .tab-link')`), `${path}: 옛 탭이 남아 있음`);
+    }
+    await page.goto(base + "/");
+    await page.waitFor(ready, "메뉴 /");
+    const open = (key) => page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').getAttribute('aria-expanded') === 'true' && !document.getElementById('menu-${key}').hidden`);
+    const closed = (key) => page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').getAttribute('aria-expanded') === 'false' && document.getElementById('menu-${key}').hidden`);
+    assert(await page.evaluate(`document.querySelector('.nav-groups li[data-group="home"] a.nav-btn') && !document.querySelector('.nav-btn[data-group="home"]')`), "홈은 드롭다운 없이 바로 이동하는 링크");
+    await page.hover('.nav-btn[data-group="learn"]');
+    assert(await closed("learn"), "hover 만으로 메뉴가 열림");
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="learn"]').click(); true`);
+    assert(await open("learn"), "클릭해도 안 열림");
+    await page.press("Escape");
+    assert(await closed("learn") && (await page.evaluate(`document.activeElement.dataset.group`)) === "learn", "Esc 로 닫히고 포커스가 그룹 버튼으로 돌아와야 함");
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="learn"]').click(); true`);
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="solve"]').click(); true`);
+    assert((await closed("learn")) && (await open("solve")), "다른 그룹을 누르면 앞 메뉴가 닫히고 새 메뉴가 열려야 함");
+    await page.evaluate(`document.querySelector('main').click(); true`);
+    assert(await closed("solve"), "바깥 클릭으로 안 닫힘");
+    // 키보드: Tab 으로 그룹 버튼에 가서 Enter/Space 로 열고, ↓·Tab 으로 항목 이동, Esc 로 닫기
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="review"]').focus(); true`);
+    await page.press("Enter");
+    assert(await open("review"), "Enter 로 안 열림");
+    await page.press("Escape");
+    await page.press(" ");
+    assert(await open("review"), "Space 로 안 열림");
+    await page.press("ArrowDown");
+    assert((await page.evaluate(`document.activeElement.textContent`)) === "오답노트", "↓ 로 첫 항목에 포커스");
+    await page.press("Tab");
+    assert((await page.evaluate(`document.activeElement.textContent`)) === "주간 돌아보기" && (await open("review")), "Tab 으로 다음 항목, 메뉴는 열린 채");
+    await page.press("Escape");
+    assert(await closed("review"), "항목에서 Esc 로 닫힘");
+    assert(await page.evaluate(`document.querySelector('.nav-btn[data-group="review"]').getAttribute('aria-haspopup') === 'true' && document.querySelector('.nav-btn[data-group="review"]').getAttribute('aria-controls') === 'menu-review'`), "aria 속성");
+    // 스크린샷: 라이트·다크 드롭다운, 계정 메뉴
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="solve"]').click(); true`);
+    await page.shotTo("메뉴-풀기-light", NAV_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+    await sleep(250);
+    await page.shotTo("메뉴-풀기-dark", NAV_SHOTS);
+    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+    await page.evaluate(`document.getElementById('userName').click(); true`);
+    assert(await page.evaluate(`!document.getElementById('menu-account').hidden && !!document.getElementById('accountLink') && !!document.getElementById('adminLink') && !!document.getElementById('logoutBtn')`), "계정 메뉴: 내 계정·계정 관리(관리자)·로그아웃");
+    await page.shotTo("메뉴-계정-light", NAV_SHOTS);
+  });
+
+  await scenario("상단 메뉴: 세부 메뉴가 올바른 화면·탭으로 가고 해당 그룹이 보라색으로 켜짐", async () => {
+    await page.viewport(1100, 900, false);
+    const items = [["learn", "배우기", "/study", "/study", ""], ["learn", "배우기", "/#words", "/", "#words"], ["solve", "풀기", "/ox", "/ox", ""], ["solve", "풀기", "/#answers", "/", "#answers"],
+      ["solve", "풀기", "/#mock", "/", "#mock"], ["solve", "풀기", "/toc", "/toc", ""], ["review", "복습", "/#notebook", "/", "#notebook"], ["review", "복습", "/review-week", "/review-week", ""],
+      ["plan", "계획", "/plan", "/plan", ""], ["plan", "계획", "/#analysis", "/", "#analysis"]];
+    const panelOf = { "#words": "words", "#answers": "answers", "#mock": "mock", "#notebook": "notebook", "#analysis": "analysis" };
+    for (const [key, label, href, path, hash] of items) {
+      await page.goto(base + "/");
+      await page.waitFor(`document.getElementById('userName') && document.querySelector('.nav-btn[data-group="${key}"]')`, "메뉴");
+      await page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').click(); document.querySelector('#menu-${key} a[href="${href}"]').click(); true`);
+      await page.waitFor(`location.pathname === '${path}' && location.hash === '${hash}' && document.getElementById('userName')`, `이동 ${href}`);
+      await page.waitFor(`(document.querySelector('.topbar .nav-btn.active') || {}).textContent === '${label}'`, `${href}: '${label}' 그룹이 켜짐`);
+      assert(await page.evaluate(`document.querySelectorAll('.topbar .nav-btn.active').length === 1 && document.querySelector('#menu-${key} a[aria-current="page"]').getAttribute('href') === '${href}'`), `${href}: 활성 그룹·현재 항목 표시`);
+      if (hash) assert(await page.evaluate(`document.getElementById('${panelOf[hash]}').classList.contains('active') && !document.getElementById('today').closest('.panel').classList.contains('active')`), `${href}: ${panelOf[hash]} 탭이 열려야 함`);
+    }
+    // 홈: 다른 곳에서 '홈'을 누르면 오늘의 공부 / ,  /#ask 도 홈 그룹
+    await page.goto(base + "/study");
+    await page.waitFor(`document.getElementById('userName')`, "메뉴");
+    await page.evaluate(`document.querySelector('.nav-groups li[data-group="home"] a').click(); true`);
+    await page.waitFor(`location.pathname === '/' && location.hash === '' && document.getElementById('todayList')`, "홈 이동");
+    assert(await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent === '홈' && document.getElementById('askBox').hidden`), "홈 그룹 활성·질문창 숨김");
+    await page.goto(base + "/#ask");
+    await page.waitFor(`!document.getElementById('askBox').hidden && document.querySelector('.topbar .nav-btn.active')`, "/#ask");
+    assert((await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent`)) === "홈", "/#ask 는 홈 그룹");
+    // 같은 화면에서 메뉴로 탭을 바꿔도 활성 그룹이 따라감(해시 변경)
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('userName')`, "메뉴");
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="review"]').click(); document.querySelector('#menu-review a[href="/#notebook"]').click(); true`);
+    await page.waitFor(`document.querySelector('.topbar .nav-btn.active').textContent === '복습'`, "복습 활성");
+    await page.evaluate(`document.querySelector('.nav-btn[data-group="solve"]').click(); document.querySelector('#menu-solve a[href="/#mock"]').click(); true`);
+    await page.waitFor(`document.querySelector('.topbar .nav-btn.active').textContent === '풀기' && document.getElementById('mock').classList.contains('active')`, "같은 화면에서 풀기·모의고사로 전환");
+    // 계획·캘린더 합침
+    await page.goto(base + "/calendar");
+    await page.waitFor(`location.pathname === '/plan' && location.hash === '#calendar' && document.getElementById('calGrid')`, "/calendar → /plan#calendar");
+    const place = await page.evaluate(`(() => { const top = (id) => document.getElementById(id).getBoundingClientRect().top + scrollY; return { exam: top('examDate'), daily: top('dailyOx'), week: top('weekLink'), grid: top('calendar'), days: top('calGrid') }; })()`);
+    assert(place.exam < place.grid && place.daily < place.grid && place.week > place.grid - 1 && place.week < place.days, "계획(위)·하루 분량 설정·캘린더(아래) 순서와 주간 돌아보기 링크 위치: " + JSON.stringify(place));
+    assert(await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent === '계획'`), "계획 그룹 활성");
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('calendarLink')`, "카드 링크");
+    assert(await page.evaluate(`document.getElementById('calendarLink').getAttribute('href') === '/plan' && document.getElementById('calendarLink').textContent === '계획 세우기'`), "계획 없으면 카드 링크는 /plan");
+  });
+
+  await scenario("상단 메뉴: 계정 드롭다운에서 내 계정·로그아웃이 동작", async () => {
+    await page.viewport(1100, 900, false);
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('userName')`, "계정 버튼");
+    assert(await page.evaluate(`document.getElementById('menu-account').hidden && document.getElementById('userName').getAttribute('aria-expanded') === 'false'`), "처음에는 닫혀 있음");
+    await page.evaluate(`document.getElementById('userName').click(); true`);
+    await page.press("Escape");
+    assert(await page.evaluate(`document.getElementById('menu-account').hidden`), "Esc 로 닫힘");
+    await page.evaluate(`document.getElementById('userName').click(); document.getElementById('accountLink').click(); true`);
+    await page.waitFor(`location.pathname === '/account' && document.getElementById('userName')`, "내 계정으로 이동");
+    await page.evaluate(`document.getElementById('userName').click(); true`);
+    await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/login'`, "로그아웃");
+    await logIn("admin", "admin-pass-1");
+  });
+
+  await scenario("상단 메뉴: 1280·1000·390·320px 에서 한 줄에 들어가고 가로 스크롤이 없으며 드롭다운이 화면 안에 열림", async () => {
+    for (const [width, mobile] of [[1280, false], [1000, false], [390, true], [320, true]]) {
+      await page.viewport(width, 800, mobile);
+      for (const path of ["/", "/plan", "/study"]) {
+        await page.goto(base + path);
+        await page.waitFor(`document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 5 && document.getElementById('userName')`, `${width}px ${path} 메뉴`);
+        const r = await page.evaluate(`(() => {
+          const btns = [...document.querySelectorAll('.topbar .nav-btn')].map((b) => b.getBoundingClientRect());
+          const bar = document.querySelector('.topbar').getBoundingClientRect();
+          return { n: btns.length, left: Math.min(...btns.map((b) => b.left)), right: Math.max(...btns.map((b) => b.right)), midMin: Math.min(...btns.map((b) => (b.top + b.bottom) / 2)), midMax: Math.max(...btns.map((b) => (b.top + b.bottom) / 2)),
+                   height: bar.height, scroll: document.documentElement.scrollWidth <= window.innerWidth + 1 };
+        })()`);
+        assert(r.n === 6 && r.left >= 0 && r.right <= width + 0.5, `${width}px ${path}: 메뉴가 화면 밖으로 나감 ${JSON.stringify(r)}`);
+        assert(r.midMax - r.midMin < 6 && r.height < 80, `${width}px ${path}: 한 줄이 아님 ${JSON.stringify(r)}`);
+        assert(r.scroll, `${width}px ${path}: 가로 스크롤 ${JSON.stringify(r)}`);
+      }
+      await page.goto(base + "/");
+      await page.waitFor(`document.getElementById('userName')`, "메뉴");
+      for (const key of ["learn", "plan"]) {
+        await page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').click(); true`);
+        const m = await page.evaluate(`(() => { const b = document.getElementById('menu-${key}').getBoundingClientRect(); return { left: b.left, right: b.right, width: b.width }; })()`);
+        assert(m.left >= 0 && m.right <= width + 0.5 && m.width > 40, `${width}px: '${key}' 드롭다운이 화면 밖으로 나감 ${JSON.stringify(m)}`);
+      }
+      await page.evaluate(`document.getElementById('userName').click(); true`);
+      const a = await page.evaluate(`(() => { const b = document.getElementById('menu-account').getBoundingClientRect(); return { left: b.left, right: b.right }; })()`);
+      assert(a.left >= 0 && a.right <= width + 0.5, `${width}px: 계정 드롭다운이 화면 밖으로 나감 ${JSON.stringify(a)}`);
+      if (width === 390 || width === 320) { await page.evaluate(`document.querySelector('.nav-btn[data-group="plan"]').click(); true`); await page.shotTo(`메뉴-${width}-mobile`, NAV_SHOTS); }
+    }
+    await page.viewport(1100, 900, false);
   });
 
   await scenario("콘솔 오류가 없다", async () => {

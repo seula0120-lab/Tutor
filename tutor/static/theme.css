@@ -66,31 +66,36 @@ code { font-size: 13px; background: var(--accent-soft); border-radius: var(--s1)
 /* ---- 접근성: 키보드 초점은 항상 보이게, 움직임 줄이기 설정을 따른다 ---- */
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
-@media (prefers-reduced-motion: no-preference) { button, .tab, .tab-link, .choice { transition: background-color .12s, border-color .12s; } }
+@media (prefers-reduced-motion: no-preference) { button, .nav-btn, .choice { transition: background-color .12s, border-color .12s; } }
 
 /* ---- 상단 바 + 알약 탭 ---- */
 .topbar { position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: var(--shadow); }
 .topbar-inner { max-width: 960px; margin: 0 auto; padding: var(--s2) var(--s4); display: flex; align-items: center; gap: var(--s4); }
 .brand { font-weight: 800; font-size: 16px; white-space: nowrap; color: var(--text); text-decoration: none; }
 .brand small { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: var(--s1); }
-.tabs-wrap { position: relative; flex: 1; min-width: 0; overflow: hidden; }      /* 탭이 로고 영역으로 넘어가지 않게 자른다 */
-/* 탭 줄이 가로로 넘칠 때 잘린 가장자리: 덮개(배경색)가 아니라 마스크로 끝이 완전히 투명해지게 한다(배경이 바뀌거나 계정 버튼이 붙어도 글자 조각이 비치지 않는다).
-   가장자리 바깥쪽 12px 는 완전히 비우고 그 안쪽 24px 에 걸쳐 서서히 나타난다. .more = 오른쪽에 더 있음, .more-left = 왼쪽에 가려진 탭이 있음. */
-.tabs-wrap.more .tabs { -webkit-mask-image: linear-gradient(to left, transparent 0, transparent 12px, #000 36px); mask-image: linear-gradient(to left, transparent 0, transparent 12px, #000 36px); }
-.tabs-wrap.more-left .tabs { -webkit-mask-image: linear-gradient(to right, transparent 0, transparent 12px, #000 36px); mask-image: linear-gradient(to right, transparent 0, transparent 12px, #000 36px); }
-.tabs-wrap.more.more-left .tabs { -webkit-mask-image: linear-gradient(to right, transparent 0, transparent 12px, #000 36px, #000 calc(100% - 36px), transparent calc(100% - 12px), transparent 100%); mask-image: linear-gradient(to right, transparent 0, transparent 12px, #000 36px, #000 calc(100% - 36px), transparent calc(100% - 12px), transparent 100%); }
-.tabs { position: relative; display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; min-width: 0; padding: var(--s1) 0; }
-.tabs::-webkit-scrollbar { display: none; }
-/* 데스크톱·노트북 폭(561px 이상)에서는 탭이 잘리지 않게 줄바꿈하고, 모바일(560px 이하)만 가로 스크롤한다 */
-@media (min-width: 561px) {
-  .topbar-inner { max-width: 1180px; gap: var(--s3); }
-  .tabs-wrap { overflow: visible; }
-  .tabs { flex-wrap: wrap; overflow: visible; row-gap: 0; justify-content: center; }
-  .tab, .tab-link { padding: var(--s1) var(--s3); }
+/* 상단 메뉴: 그룹 5개(알약)와 계정 버튼. 드롭다운은 클릭/키보드로만 열린다. 한 줄에 들어가도록 좁은 화면에서는 글자·여백을 줄이고 로고 글자를 감춘다. */
+.nav-groups { flex: 1; min-width: 0; }
+.nav-groups > ul { display: flex; justify-content: center; gap: var(--s1); list-style: none; margin: 0; padding: 0; }
+.nav-group { position: relative; flex: none; }
+.nav-drop { position: relative; }
+.nav-btn { flex: none; display: inline-block; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); padding: var(--s1) var(--s4); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.nav-btn:hover { background: var(--accent-soft); color: var(--accent); }
+.nav-btn.active { background: var(--accent); color: var(--on-accent); }
+.nav-drop > .nav-btn[aria-expanded="true"]:not(.active) { background: var(--accent-soft); color: var(--accent); }
+.nav-btn[aria-haspopup]::after { content: "▾"; font-size: 10px; margin-left: 4px; opacity: .7; }
+.nav-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; min-width: 148px; list-style: none; margin: 0; padding: var(--s1); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.nav-menu[hidden] { display: none; }
+.nav-menu a, .nav-menu button { display: block; width: 100%; box-sizing: border-box; text-align: left; padding: var(--s2) var(--s3); border: 0; border-radius: var(--s2); background: transparent; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; text-decoration: none; white-space: nowrap; cursor: pointer; }
+.nav-menu a:hover, .nav-menu button:hover { background: var(--accent-soft); color: var(--accent); }
+.nav-menu a.current { color: var(--accent); }
+.user-btn { max-width: 9em; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 561px) { .topbar-inner { max-width: 1180px; gap: var(--s3); } }
+@media (max-width: 560px) {
+  .nav-btn { padding: 4px 8px; font-size: 13px; }
+  .nav-groups > ul { gap: 2px; }
+  .user-btn { max-width: 4.5em; }
 }
-.tab, .tab-link { flex: none; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted); padding: var(--s1) var(--s4); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
-.tab:hover, .tab-link:hover { background: var(--accent-soft); color: var(--accent); }
-.tab.active, .tab-link.active { background: var(--accent); color: var(--on-accent); }
+@media (max-width: 420px) { .brand { display: none; } .nav-groups > ul { justify-content: flex-start; } }
 main, .page { max-width: 960px; margin: 0 auto; padding: var(--s5) var(--s4) var(--s8); }
 
 /* ---- 상자·패널 ---- */
@@ -291,7 +296,6 @@ h2 { font-size: 17px; margin: 0 0 var(--s2); }
 .login-card input { width: 100%; box-sizing: border-box; padding: var(--s2); font: inherit; border: 1px solid var(--line); border-radius: var(--s2); background: var(--surface); color: var(--text); }
 .login-card button { margin-top: var(--s4); width: 100%; padding: var(--s2); }
 .login-error { color: var(--bad); margin-top: var(--s3); min-height: 1.4em; }
-@media (max-width: 560px) { #userName { display: none; } }
 
 /* 캘린더·계획 */
 .cal-head { display: flex; flex-wrap: wrap; gap: var(--s4); align-items: baseline; }

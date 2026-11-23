@@ -15,8 +15,8 @@
 <div id="weeks"></div>
 </main>
 <script src="/static/quizcard.js"></script>
+<script src="/static/nav.js"></script>
 <script>
-mountTopbar("calendar");
 const pct = (r) => (r === null ? "-" : Math.round(r * 100) + "%");
 function weekCard(w) {
   const stat = (label, value) => el("div", { className: "cal-stat" }, el("span", { className: "small", textContent: label }), el("b", { textContent: value }));

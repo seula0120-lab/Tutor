@@ -103,7 +103,7 @@ def test_question_by_id_and_static_script_and_notebook_tab(tmp_path):
     assert status == 200 and found["id"] == "1-1" and "answer" not in found
     static = Path(__file__).resolve().parent.parent / "tutor" / "static"
     page = (static / "index.html").read_text(encoding="utf-8")
-    assert 'data-tab="notebook"' in page and "/static/quizcard.js" in page
+    assert "/#notebook" in (static / "nav.js").read_text(encoding="utf-8") and 'id="notebook"' in page and "/static/quizcard.js" in page
     assert "오답입니다." in (static / "quizcard.js").read_text(encoding="utf-8")
 
 

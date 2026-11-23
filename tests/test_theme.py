@@ -56,14 +56,12 @@ def test_offline_export_inlines_theme_without_font_files(conn):
     assert "@font-face" not in inline_theme()
 
 
-def test_tab_row_overflow_hint_and_hash_links_are_wired():
-    js = (STATIC_DIR / "quizcard.js").read_text(encoding="utf-8")
+def test_nav_script_and_hash_links_are_wired():
     index = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    assert ".tabs-wrap.more .tabs" in THEME and "mask-image: linear-gradient(to right, transparent" in THEME
-    assert ".tabs-wrap.more-left .tabs" in THEME and "overflow: hidden" in THEME.split(".tabs-wrap {")[1].split("}")[0] and "more-left" in js
-    assert "scrollTabIntoView" in js and "watchTabOverflow" in js and "mountTopbar" in js
+    nav = (STATIC_DIR / "nav.js").read_text(encoding="utf-8")
+    assert ".nav-btn" in THEME and ".nav-menu" in THEME and ".nav-menu[hidden]" in THEME
     # 해시 링크 처리는 스크립트 맨 아래(최상위)에서 실행돼야 한다: 다른 이벤트 처리기 안에 들어가면 /#answers 링크가 동작하지 않는다
     tail = index.split("loadFavorites();\n")[-1]
-    assert "tabFromHash();" in tail and 'addEventListener("hashchange"' in tail
+    assert "applyHash();" in tail and 'addEventListener("hashchange"' in tail and 'addEventListener("hashchange"' in nav
     for page in ("toc.html", "glossary_review.html"):
-        assert "mountTopbar(" in (STATIC_DIR / page).read_text(encoding="utf-8")
+        assert 'id="topbar"' in (STATIC_DIR / page).read_text(encoding="utf-8")
