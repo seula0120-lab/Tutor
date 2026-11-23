@@ -319,7 +319,7 @@ async function main() {
     await page.goto(base + "/");
     assert((await page.evaluate(`getComputedStyle(document.querySelector('.topbar')).position`)) === "sticky", "상단 바가 sticky 가 아님");
     const labels = await page.evaluate(`[...document.querySelectorAll('.topbar .nav-groups .nav-btn')].map((n) => n.textContent.replace('', '').trim())`);
-    assert(labels.join() === "홈,질문,배우기,풀기,복습,계획", "그룹 순서가 다름: " + labels.join(" · "));
+    assert(labels.join() === "홈,배우기,풀기,복습,계획", "그룹 순서가 다름: " + labels.join(" · "));
     assert((await page.evaluate(`getComputedStyle(document.querySelector('.nav-btn')).borderRadius`)) === "999px", "알약 모양이 아님");
     await page.waitFor(`Promise.all([document.fonts.load('16px Pretendard', '가'), document.fonts.load('600 16px "Noto Serif KR"', '가')]).then((r) => r.every((x) => x.length > 0))`, "번들 글꼴 로드");
     for (const path of ["/", "/toc", "/glossary-review"]) {
@@ -1027,14 +1027,14 @@ async function main() {
     await logIn("admin", "admin-pass-1");
   });
 
-  await scenario("상단 메뉴: 그룹 6개(홈·질문·배우기·풀기·복습·계획)가 모든 화면에 같고, 드롭다운은 클릭·키보드로 열리고 Esc·바깥 클릭으로 닫힘(hover 로는 안 열림)", async () => {
+  await scenario("상단 메뉴: 그룹 5개가 모든 화면에 같고, 드롭다운은 클릭·키보드로 열리고 Esc·바깥 클릭으로 닫힘(hover 로는 안 열림)", async () => {
     await page.viewport(1100, 900, false);
-    const ready = `document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 6 && document.getElementById('userName')`;
+    const ready = `document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 5 && document.getElementById('userName')`;
     const groupLabels = `[...document.querySelectorAll('.topbar .nav-groups .nav-btn')].map((n) => n.textContent.replace('', '').trim()).join()`;
     for (const path of ["/", "/study", "/ox", "/toc", "/plan", "/review-week", "/account", "/start"]) {
       await page.goto(base + path);
       await page.waitFor(ready, `메뉴 ${path}`);
-      assert((await page.evaluate(groupLabels)) === "홈,질문,배우기,풀기,복습,계획", `${path}: 그룹이 다름: ` + await page.evaluate(groupLabels));
+      assert((await page.evaluate(groupLabels)) === "홈,배우기,풀기,복습,계획", `${path}: 그룹이 다름`);
       assert(await page.evaluate(`document.querySelectorAll('.topbar').length === 1 && !document.querySelector('.topbar .tab, .topbar .tab-link')`), `${path}: 옛 탭이 남아 있음`);
     }
     await page.goto(base + "/");
@@ -1102,7 +1102,7 @@ async function main() {
     assert(await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent === '홈' && document.getElementById('askBox').hidden`), "홈 그룹 활성·질문창 숨김");
     await page.goto(base + "/#ask");
     await page.waitFor(`!document.getElementById('askBox').hidden && document.querySelector('.topbar .nav-btn.active')`, "/#ask");
-    assert((await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent`)) === "질문", "/#ask 는 질문 그룹");
+    assert((await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent`)) === "홈", "/#ask 는 홈 그룹");
     // 같은 화면에서 메뉴로 탭을 바꿔도 활성 그룹이 따라감(해시 변경)
     await page.goto(base + "/");
     await page.waitFor(`document.getElementById('userName')`, "메뉴");
@@ -1119,27 +1119,6 @@ async function main() {
     await page.goto(base + "/");
     await page.waitFor(`document.getElementById('calendarLink')`, "카드 링크");
     assert(await page.evaluate(`document.getElementById('calendarLink').getAttribute('href') === '/plan' && document.getElementById('calendarLink').textContent === '계획 세우기'`), "계획 없으면 카드 링크는 /plan");
-  });
-
-  await scenario("상단 메뉴 '질문': 모든 화면에서 누르면 /#ask 가 열리고 '자기주식' 검색 결과가 나옴, 390px 가로 스크롤 없음", async () => {
-    await page.viewport(1100, 900, false);
-    for (const path of ["/", "/study", "/ox", "/toc", "/plan", "/review-week", "/account", "/start"]) {
-      await page.goto(base + path);
-      await page.waitFor(`document.getElementById('userName') && document.querySelector('.nav-groups li[data-group="ask"] a.nav-btn')`, `메뉴 ${path}`);
-      assert(await page.evaluate(`!document.querySelector('.nav-btn[data-group="ask"]') && document.querySelector('.nav-groups li[data-group="ask"] a').getAttribute('href') === '/#ask' && document.querySelector('.nav-groups li:nth-child(2)').dataset.group === 'ask'`), `${path}: '질문'은 홈 바로 오른쪽의 드롭다운 없는 링크`);
-      await page.evaluate(`document.querySelector('.nav-groups li[data-group="ask"] a').click(); true`);
-      await page.waitFor(`location.pathname === '/' && location.hash === '#ask' && !document.getElementById('askBox').hidden && document.getElementById('q')`, `${path} → /#ask`);
-      assert((await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent`)) === "질문", `${path}: '질문'이 활성 표시가 아님`);
-      if (path === "/") {
-        await page.evaluate(`document.getElementById('q').value = '자기주식'; document.getElementById('ask').click(); true`);
-        await page.waitFor(`document.getElementById('answer').textContent.includes('자기주식') && document.querySelectorAll('#answer .hit, #answer .summary-card, #answer .card').length > 0`, "'자기주식' 검색 결과");
-      }
-    }
-    await page.viewport(390, 844, true);
-    await page.goto(base + "/#ask");
-    await page.waitFor(`!document.getElementById('askBox').hidden && document.querySelector('.topbar .nav-btn.active')`, "390px /#ask");
-    assert(await page.evaluate(`document.documentElement.scrollWidth <= window.innerWidth + 1`), "390px 가로 스크롤(/#ask)");
-    await page.viewport(1100, 900, false);
   });
 
   await scenario("상단 메뉴: 계정 드롭다운에서 내 계정·로그아웃이 동작", async () => {
@@ -1163,14 +1142,14 @@ async function main() {
       await page.viewport(width, 800, mobile);
       for (const path of ["/", "/plan", "/study"]) {
         await page.goto(base + path);
-        await page.waitFor(`document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 6 && document.getElementById('userName')`, `${width}px ${path} 메뉴`);
+        await page.waitFor(`document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 5 && document.getElementById('userName')`, `${width}px ${path} 메뉴`);
         const r = await page.evaluate(`(() => {
           const btns = [...document.querySelectorAll('.topbar .nav-btn')].map((b) => b.getBoundingClientRect());
           const bar = document.querySelector('.topbar').getBoundingClientRect();
           return { n: btns.length, left: Math.min(...btns.map((b) => b.left)), right: Math.max(...btns.map((b) => b.right)), midMin: Math.min(...btns.map((b) => (b.top + b.bottom) / 2)), midMax: Math.max(...btns.map((b) => (b.top + b.bottom) / 2)),
                    height: bar.height, scroll: document.documentElement.scrollWidth <= window.innerWidth + 1 };
         })()`);
-        assert(r.n === 7 && r.left >= 0 && r.right <= width + 0.5, `${width}px ${path}: 메뉴가 화면 밖으로 나감 ${JSON.stringify(r)}`);
+        assert(r.n === 6 && r.left >= 0 && r.right <= width + 0.5, `${width}px ${path}: 메뉴가 화면 밖으로 나감 ${JSON.stringify(r)}`);
         assert(r.midMax - r.midMin < 6 && r.height < 80, `${width}px ${path}: 한 줄이 아님 ${JSON.stringify(r)}`);
         assert(r.scroll, `${width}px ${path}: 가로 스크롤 ${JSON.stringify(r)}`);
       }
