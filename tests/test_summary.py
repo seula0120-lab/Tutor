@@ -330,7 +330,7 @@ def test_related_ids_include_calculation_and_combination_questions(tmp_path):
 def test_topic_run_reuses_shared_session_runner():
     from pathlib import Path
     static = Path(__file__).resolve().parent.parent / "tutor" / "static"
-    page = (static / "index.html").read_text(encoding="utf-8")
+    page = (static / "ask.js").read_text(encoding="utf-8")                  # 요약 카드는 질문 패널(ask.js)에서 그린다
     shared = (static / "quizcard.js").read_text(encoding="utf-8")
     assert "runSession(sm.related_ids" in page and "async function runSession" in shared
     assert "function renderCard" not in page and "function runSession" not in page        # 복사본 없음

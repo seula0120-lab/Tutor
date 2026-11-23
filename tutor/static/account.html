@@ -8,7 +8,7 @@
 </head>
 <body>
 <div id="topbar"></div>
-<main>
+<main class="reading">
 <form id="pwForm" class="paper login-card">
   <h2>내 비밀번호 바꾸기</h2>
   <p class="small">현재 비밀번호를 확인한 뒤 바꿉니다. 다른 기기의 로그인은 풀립니다.</p>
@@ -21,6 +21,7 @@
 </main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
 $("pwForm").addEventListener("submit", async (e) => {
   e.preventDefault();

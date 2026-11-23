@@ -8,7 +8,7 @@
 </head>
 <body>
 <div id="topbar"></div>
-<main>
+<main class="reading">
 <h1>주간 돌아보기</h1>
 <div class="sub"><a href="/calendar">← 캘린더</a> · 주는 일요일부터 토요일, 정답률은 O/X·기출 풀이(확인만 한 기록·모의고사 제외)입니다.</div>
 <section class="paper" id="weakBox" aria-label="약한 단원"></section>
@@ -16,6 +16,7 @@
 </main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
 const pct = (r) => (r === null ? "-" : Math.round(r * 100) + "%");
 function weekCard(w) {

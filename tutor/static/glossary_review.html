@@ -8,7 +8,7 @@
 </head>
 <body>
 <div id="topbar"></div>
-<main>
+<main class="reading">
 <h1>용어 사전 검토</h1>
 <div class="small">문제 글에 나온 횟수가 많은 용어부터 보여 줍니다(보기·해설은 세지 않음). 검토 상태·메모·수정 제안은 <code>data/glossary_review.json</code> 에만 쌓이고 <code>glossary.json</code> 은 바뀌지 않습니다.</div>
 <div class="small" id="summary" style="margin-top:6px"></div>
@@ -19,6 +19,7 @@
 </main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
 (async () => {
   const { data } = await api("/api/glossary_review");

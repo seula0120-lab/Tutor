@@ -167,7 +167,7 @@ def test_ask_returns_summary_card_without_api_key(conn):
 
 def test_quiz_page_locks_choices_after_wrong_answer():
     # 퀴즈 카드 코드는 공용 static/quizcard.js 로 옮겼다(같은 검사를 그 파일에 한다).
-    page = ROOT_PAGE.read_text(encoding="utf-8")
+    page = ROOT_PAGE.read_text(encoding="utf-8") + (ROOT_PAGE.parent / "ask.js").read_text(encoding="utf-8")
     card = (ROOT_PAGE.parent / "quizcard.js").read_text(encoding="utf-8")
     assert "다시 골라" not in page + card                            # 재시도 안내 문구 없음
     wrong_branch = card[card.index('b.classList.add("wrong")'):][:260]

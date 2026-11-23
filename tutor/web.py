@@ -25,6 +25,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 HOST = "127.0.0.1"
 # 주소 → (static 폴더의 파일, 내용 종류). 이 목록에 있는 파일만 내보낸다.
 STATIC_FILES = {"/static/nav.js": ("nav.js", "text/javascript; charset=utf-8"),
+                "/static/ask.js": ("ask.js", "text/javascript; charset=utf-8"),
                 "/static/quizcard.js": ("quizcard.js", "text/javascript; charset=utf-8"),
                 "/static/theme.css": ("theme.css", "text/css; charset=utf-8")}
 FONT_FILES = {"PretendardVariable.woff2", "NotoSerifKR-600.woff2", "NotoSerifKR-latin-600.woff2"}   # /static/fonts/<이름> 으로만 내려 준다

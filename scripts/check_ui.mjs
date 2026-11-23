@@ -40,6 +40,7 @@ const CAL_SHOTS = join(SHOTS, "calendar");
 const CARRY_SHOTS = join(SHOTS, "carry");
 const START_SHOTS = join(SHOTS, "start");
 const NAV_SHOTS = join(SHOTS, "nav");
+const DASH_SHOTS = join(SHOTS, "dash");
 const NUM_SHOTS = join(SHOTS, "numbers");
 const CHROME = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PYTHON = join(ROOT, ".venv", "bin", "python");
@@ -51,6 +52,7 @@ mkdirSync(CAL_SHOTS, { recursive: true });
 mkdirSync(CARRY_SHOTS, { recursive: true });
 mkdirSync(START_SHOTS, { recursive: true });
 mkdirSync(NAV_SHOTS, { recursive: true });
+mkdirSync(DASH_SHOTS, { recursive: true });
 mkdirSync(NUM_SHOTS, { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -180,6 +182,7 @@ async function main() {
   await logIn("admin", "admin-pass-1");
 
   await scenario("질문하면 요약 카드가 나온다", async () => {
+    await page.evaluate(`openAsk(); true`);
     await page.evaluate(`document.getElementById('q').value = '정상공손 비정상공손 처리'; document.getElementById('ask').click(); true`);
     await page.waitFor(`document.getElementById('answer').textContent.includes('주제 요약 카드')`, "요약 카드");
     await page.screenshot("summary-card");
@@ -318,9 +321,9 @@ async function main() {
   await scenario("공통 구조: 고정 상단 바·알약 탭 순서·글꼴·세 화면이 theme.css 사용", async () => {
     await page.goto(base + "/");
     assert((await page.evaluate(`getComputedStyle(document.querySelector('.topbar')).position`)) === "sticky", "상단 바가 sticky 가 아님");
-    const labels = await page.evaluate(`[...document.querySelectorAll('.topbar .nav-groups .nav-btn')].map((n) => n.textContent.replace('', '').trim())`);
-    assert(labels.join() === "홈,배우기,풀기,복습,계획", "그룹 순서가 다름: " + labels.join(" · "));
-    assert((await page.evaluate(`getComputedStyle(document.querySelector('.nav-btn')).borderRadius`)) === "999px", "알약 모양이 아님");
+    const labels = await page.evaluate(`[...document.querySelectorAll('.sidebar .side-link')].map((n) => n.textContent)`);
+    assert(labels.join() === "홈,공부,단어 주석,O/X,기출 답안,모의고사,목차,오답노트,주간 돌아보기,계획·캘린더,문제 분석", "사이드바 항목 순서가 다름: " + labels.join(" · "));
+    assert((await page.evaluate(`getComputedStyle(document.getElementById('themeBtn')).borderRadius`)) === "999px", "알약 모양이 아님");
     await page.waitFor(`Promise.all([document.fonts.load('16px Pretendard', '가'), document.fonts.load('600 16px "Noto Serif KR"', '가')]).then((r) => r.every((x) => x.length > 0))`, "번들 글꼴 로드");
     for (const path of ["/", "/toc", "/glossary-review"]) {
       await page.goto(base + path);
@@ -393,7 +396,7 @@ async function main() {
   await scenario("공부: 탭 → 재무 단원 노트 → 읽음 체크 → 진도율 반영 → 5문제 풀기", async () => {
     await page.viewport(1100, 900, false);
     await page.goto(base + "/");
-    await page.evaluate(`document.querySelector('.topbar .nav-btn[data-group="learn"]').click(); document.querySelector('#menu-learn a[href="/study"]').click(); true`);
+    await page.evaluate(`document.querySelector('.sidebar .side-link[href="/study"]').click(); true`);
     await page.waitFor(`location.pathname === '/study' && document.querySelectorAll('#subjects .subject-card').length === 3`, "과목 카드 3개");
     const cardText = (subject) => `(document.querySelector('.subject-card[data-subject="${subject}"] .progress-text') || {}).textContent || ''`;
     const labels = await page.evaluate(`[...document.querySelectorAll('.subject-card h2')].map((h) => h.textContent)`);
@@ -675,6 +678,7 @@ async function main() {
 
   // ---- 계획 세우기 · 캘린더. planner 계정(오늘 기록 없음)으로: 계획 생성 → 일부(부분) → 나머지(완료) → 날짜 넘기면 어제는 완료, 오늘은 새 계획.
   const logOut = async () => {
+    await page.waitFor(`document.getElementById('logoutBtn')`, "로그아웃 버튼");
     await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
     await page.waitFor(`location.pathname === '/login'`, "로그아웃");
   };
@@ -1005,7 +1009,7 @@ async function main() {
     assert(rows.every((r) => r.reason.length > 5), "줄마다 이유 한 줄");
     assert(rows.filter((r) => r.next).length === 1 && rows[rows.findIndex((r) => !r.done)].next, "다음 할 일 = 첫 미완료 줄");
     assert((await page.evaluate(`document.getElementById('todayUnits').textContent`)).startsWith("오늘 단원:"), "카드 맨 위 오늘 단원·과목");
-    assert(await page.evaluate(`document.getElementById('askBox').hidden && document.getElementById('today').getBoundingClientRect().top < 300`), "홈: 질문창은 숨기고 오늘의 공부가 맨 위");
+    assert(await page.evaluate(`document.getElementById('askDrawer').hidden && document.getElementById('today').getBoundingClientRect().top < 300`), "홈: 질문 패널은 닫혀 있고 오늘의 공부가 맨 위");
     await page.shotTo("홈-오늘의공부-light", START_SHOTS);
     await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
     await sleep(250);
@@ -1018,7 +1022,7 @@ async function main() {
     await page.shotTo("홈-오늘의공부-mobile", START_SHOTS);
     await page.viewport(1100, 900, false);
     await page.goto(base + "/#ask");                                           // 질문 기능은 /#ask 로 그대로 남아 있다
-    await page.waitFor(`!document.getElementById('askBox').hidden && document.getElementById('q')`, "질문창(/#ask)");
+    await page.waitFor(`!document.getElementById('askDrawer').hidden && document.getElementById('q')`, "질문 패널(/#ask)");
     // 계획이 있는 사용자는 로그인하면 바로 홈
     await logOut();
     await page.evaluate(`document.getElementById('username').value = 'starter'; document.getElementById('password').value = 'starter-pass-1'; document.getElementById('loginBtn').click(); true`);
@@ -1027,143 +1031,224 @@ async function main() {
     await logIn("admin", "admin-pass-1");
   });
 
-  await scenario("상단 메뉴: 그룹 5개가 모든 화면에 같고, 드롭다운은 클릭·키보드로 열리고 Esc·바깥 클릭으로 닫힘(hover 로는 안 열림)", async () => {
-    await page.viewport(1100, 900, false);
-    const ready = `document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 5 && document.getElementById('userName')`;
-    const groupLabels = `[...document.querySelectorAll('.topbar .nav-groups .nav-btn')].map((n) => n.textContent.replace('', '').trim()).join()`;
+  const SIDE_LABELS = "홈,공부,단어 주석,O/X,기출 답안,모의고사,목차,오답노트,주간 돌아보기,계획·캘린더,문제 분석";
+  const sideLabels = `[...document.querySelectorAll('.sidebar .side-link')].map((a) => a.textContent).join()`;
+  const activeSide = `[...document.querySelectorAll('.sidebar .side-link.active')].map((a) => a.getAttribute('href')).join()`;
+  const ready = `document.querySelectorAll('.sidebar .side-link').length === 11 && document.getElementById('userName')`;
+
+  await scenario("사이드바: 모든 화면에 같은 항목이 다 펼쳐져 보이고(폭 220px) 지금 항목이 보라색, 맨 아래 로그아웃", async () => {
+    await page.viewport(1280, 900, false);
+    const pages = [["/", "/"], ["/study", "/study"], ["/ox", "/ox"], ["/toc", "/toc"], ["/plan", "/plan"], ["/review-week", "/review-week"], ["/account", ""], ["/start", ""], ["/study-changes", ""]];
+    for (const [path, active] of pages) {
+      await page.goto(base + path);
+      await page.waitFor(ready, `사이드바 ${path}`);
+      assert((await page.evaluate(sideLabels)) === SIDE_LABELS, `${path}: 항목이 다름 ` + await page.evaluate(sideLabels));
+      assert((await page.evaluate(`[...document.querySelectorAll('.sidebar .side-title')].map((t) => t.textContent).join()`)) === "배우기,풀기,복습,계획", `${path}: 그룹 제목`);
+      const r = await page.evaluate(`(() => { const s = document.querySelector('.sidebar').getBoundingClientRect(); const links = [...document.querySelectorAll('.sidebar .side-link')].map((a) => a.getBoundingClientRect()); const out = document.getElementById('sideLogout').getBoundingClientRect(); return { w: s.width, left: s.left, vis: links.every((b) => b.width > 40 && b.height > 16 && b.bottom <= innerHeight), outBottom: out.bottom, h: s.height, ih: innerHeight, drop: document.querySelectorAll('.sidebar [aria-haspopup]').length }; })()`);
+      assert(Math.abs(r.w - 220) < 1 && r.left === 0 && r.vis && r.drop === 0 && r.outBottom > r.ih - 60, `${path}: 사이드바 ${JSON.stringify(r)}`);
+      assert((await page.evaluate(activeSide)) === active, `${path}: 강조 항목 '${await page.evaluate(activeSide)}'`);
+    }
+    await page.goto(base + "/");
+    await page.waitFor(ready, "홈");
+    await page.shotTo("사이드바-1280-light", NAV_SHOTS);
+  });
+
+  await scenario("사이드바: 각 항목이 올바른 화면·패널로 가고 그 항목만 강조, /calendar 는 /plan#calendar, 계획 화면 구성", async () => {
+    await page.viewport(1280, 900, false);
+    const panelOf = { "#words": "words", "#answers": "answers", "#mock": "mock", "#notebook": "notebook", "#analysis": "analysis" };
+    const items = [["공부", "/study", "/study", ""], ["단어 주석", "/#words", "/", "#words"], ["O/X", "/ox", "/ox", ""], ["기출 답안", "/#answers", "/", "#answers"], ["모의고사", "/#mock", "/", "#mock"], ["목차", "/toc", "/toc", ""],
+      ["오답노트", "/#notebook", "/", "#notebook"], ["주간 돌아보기", "/review-week", "/review-week", ""], ["계획·캘린더", "/plan", "/plan", ""], ["문제 분석", "/#analysis", "/", "#analysis"], ["홈", "/", "/", ""]];
+    for (const [label, href, pathname, hash] of items) {
+      await page.goto(base + "/study");
+      await page.waitFor(ready, "사이드바");
+      await page.evaluate(`[...document.querySelectorAll('.sidebar .side-link')].find((a) => a.textContent === ${JSON.stringify(label)}).click(); true`);
+      await page.waitFor(`location.pathname === ${JSON.stringify(pathname)} && location.hash === ${JSON.stringify(hash)} && document.querySelectorAll('.sidebar .side-link.active').length === 1`, `${label} → ${href}`);
+      assert((await page.evaluate(activeSide)) === href, `${label}: 강조 항목 '${await page.evaluate(activeSide)}'`);
+      if (panelOf[hash]) assert(await page.evaluate(`document.getElementById(${JSON.stringify(panelOf[hash])}).classList.contains('active') && !document.getElementById('today').offsetParent`), `${label}: 패널 ${panelOf[hash]}`);
+    }
+    await page.goto(base + "/calendar?x=1");
+    await page.waitFor(`location.pathname === '/plan' && location.hash === '#calendar'`, "/calendar → /plan#calendar");
+    await page.waitFor(`document.getElementById('calendar') && document.getElementById('generate') && document.querySelectorAll('#calendar .cal-cell').length >= 28`, "계획+캘린더 화면");
+    assert(await page.evaluate(`document.getElementById('generate').getBoundingClientRect().top < document.getElementById('calendar').getBoundingClientRect().top && !!document.getElementById('weekLink')`), "계획이 위, 캘린더가 아래, 주간 돌아보기 링크");
+  });
+
+  await scenario("상단 바: 오른쪽에 다크 모드 버튼과 사용자 이름 메뉴(내 계정·계정 관리·로그아웃)만, 클릭·키보드·Esc·바깥 클릭, hover 로는 안 열림", async () => {
+    await page.viewport(1280, 900, false);
+    await page.goto(base + "/");
+    await page.waitFor(ready, "상단 바");
+    const kids = await page.evaluate(`[...document.querySelectorAll('.topbar-inner > *')].filter((n) => n.offsetParent).map((n) => n.id || n.className).join()`);
+    assert(kids === "topbar-gap,themeBtn,userbox", "상단 바 구성: " + kids);
+    const pos = await page.evaluate(`(() => { const t = document.getElementById('themeBtn').getBoundingClientRect(), u = document.getElementById('userName').getBoundingClientRect(); return t.right < u.left && u.right > innerWidth - 40; })()`);
+    assert(pos, "오른쪽 끝에 다크 모드·사용자 이름");
+    const open = `document.getElementById('menu-account') && !document.getElementById('menu-account').hidden`;
+    await page.hover("#userName");
+    assert(!(await page.evaluate(open)), "hover 만으로 열림");
+    await page.evaluate(`document.getElementById('userName').click(); true`);
+    assert((await page.evaluate(open)) && (await page.evaluate(`document.getElementById('userName').getAttribute('aria-expanded')`)) === "true", "클릭해도 안 열림");
+    assert(await page.evaluate(`!!document.getElementById('accountLink') && !!document.getElementById('adminLink') && !!document.getElementById('logoutBtn')`), "내 계정·계정 관리(관리자)·로그아웃");
+    await page.shotTo("상단바-계정-light", NAV_SHOTS);
+    await page.press("Escape");
+    assert(!(await page.evaluate(open)) && (await page.evaluate(`document.activeElement.id`)) === "userName", "Esc 로 닫히고 포커스가 이름 버튼으로");
+    await page.evaluate(`document.getElementById('userName').click(); true`);
+    await page.evaluate(`document.body.click(); true`);
+    assert(!(await page.evaluate(open)), "바깥 클릭으로 닫힘");
+    await page.evaluate(`document.getElementById('userName').focus(); true`);
+    await page.press("ArrowDown");
+    assert((await page.evaluate(open)) && (await page.evaluate(`document.activeElement.id`)) === "accountLink", "↓ 로 열고 첫 항목으로");
+    await page.press("Escape");
+    await page.evaluate(`document.getElementById('userName').click(); document.getElementById('accountLink').click(); true`);
+    await page.waitFor(`location.pathname === '/account'`, "내 계정 이동");
+    // 다크 모드 버튼
+    await page.goto(base + "/");
+    await page.waitFor(ready, "홈");
+    const bg = `getComputedStyle(document.body).backgroundColor`;
+    const before = await page.evaluate(bg);
+    await page.evaluate(`document.getElementById('themeBtn').click(); true`);
+    const dark = await page.evaluate(`document.documentElement.dataset.theme + '|' + ${bg}`);
+    assert(dark.startsWith("dark|") && dark !== "dark|" + before, "다크 모드 버튼 → 어두운 바탕: " + dark);
+    await page.goto(base + "/study");
+    await page.waitFor(ready, "공부");
+    assert((await page.evaluate(`document.documentElement.dataset.theme`)) === "dark", "다크 모드가 다른 화면에도 유지됨");
+    await page.evaluate(`document.getElementById('themeBtn').click(); true`);
+    assert((await page.evaluate(`document.documentElement.dataset.theme + '|' + ${bg}`)) === "light|" + before, "다시 누르면 라이트");
+    await page.evaluate(`localStorage.removeItem('tutorTheme'); delete document.documentElement.dataset.theme; true`);
+  });
+
+  await scenario("홈 대시보드: 1440px 에서 1행(오늘의 공부|시험 카드)·2행(숫자 카드 5개)·3행(이번 주 7칸|지난 7일), 시험일 있음/없음, 기록 없으면 '-'", async () => {
+    await page.viewport(1440, 900, false);
+    assert(await page.evaluate(`api('/api/users', { username: 'dashnew', name: '새내기', password: 'dashnew-pass-1' }).then((r) => r.ok)`), "dashnew 계정 만들기");
+    await logOut();
+    await page.evaluate(`document.getElementById('username').value = 'dashnew'; document.getElementById('password').value = 'dashnew-pass-1'; document.getElementById('loginBtn').click(); true`);
+    await page.waitFor(`location.pathname === '/start'`, "계획 없는 사용자 → /start");
+    await page.goto(base + "/");
+    await page.waitFor(`document.getElementById('examDday') && document.querySelectorAll('#stats .stat').length === 5 && document.getElementById('todayList')`, "홈(계획 없음)");
+    assert((await page.evaluate(`document.getElementById('examDday').textContent`)) === "시험일 미정" && (await page.evaluate(`document.getElementById('examLink').textContent`)) === "계획 세우기", "시험일 없음 카드");
+    const vals = await page.evaluate(`Object.fromEntries([...document.querySelectorAll('#stats .stat')].map((s) => [s.dataset.stat, s.querySelector('.stat-value').textContent]))`);
+    assert(vals.planPct === "-" && vals.oxRate === "-" && vals.quizRate === "-", "기록이 없으면 '-' (0% 로 지어내지 않음): " + JSON.stringify(vals));
+    await logOut();
+    await logIn("starter", "starter-pass-1");
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#stats .stat').length === 5 && document.querySelectorAll('#weekCells a').length === 7 && document.getElementById('todayList')`, "홈(계획 있음)");
+    const exam = await page.evaluate(`(() => { const e = new Date(); e.setDate(e.getDate() + 20); return e.toLocaleDateString('sv-SE'); })()`);
+    const dd = await page.evaluate(`document.getElementById('examDday').textContent`);
+    assert(/^D-(19|20)$/.test(dd) && (await page.evaluate(`document.getElementById('examDate').textContent`)) === exam && (await page.evaluate(`document.getElementById('examLink').textContent`)) === "계획 보기", "시험일 있음 카드: " + dd);
+    const lay = await page.evaluate(`(() => {
+      const r = (id) => document.getElementById(id).getBoundingClientRect();
+      const stats = [...document.querySelectorAll('#stats .stat')].map((s) => s.getBoundingClientRect());
+      const cells = [...document.querySelectorAll('#weekCells a')].map((c) => c.getBoundingClientRect());
+      const m = document.querySelector('main').getBoundingClientRect();
+      return { todayLeft: r('today').left, examLeft: r('examCard').left, todayTop: r('today').top, examTop: r('examCard').top, todayW: r('today').width, examW: r('examCard').width,
+        statTops: new Set(stats.map((s) => Math.round(s.top))).size, statsBottom: Math.max(...stats.map((s) => s.bottom)), row1Bottom: Math.max(r('today').bottom, r('examCard').bottom),
+        cellTops: new Set(cells.map((c) => Math.round(c.top))).size, weekTop: r('weekPlan').top, logLeft: r('weekLog').left, weekLeft: r('weekPlan').left, mainW: m.width, mainLeft: m.left,
+        hrefs: [...document.querySelectorAll('#weekCells a')].every((a) => a.getAttribute('href').startsWith('/plan?date=') && a.getAttribute('href').endsWith('#calendar')),
+        dow: [...document.querySelectorAll('#weekCells .d')].map((d) => d.textContent[0]).join(''), states: [...document.querySelectorAll('#weekCells a')].every((a) => !!a.dataset.state),
+        log: !!document.querySelector('#weekLog details:not([open]) #weekTable') };
+    })()`);
+    assert(lay.todayLeft < lay.examLeft && Math.abs(lay.todayTop - lay.examTop) < 4 && lay.todayW > lay.examW, "1행: 왼쪽 넓은 오늘의 공부 + 오른쪽 시험 카드 " + JSON.stringify(lay));
+    assert(lay.statTops === 1 && lay.statsBottom <= lay.weekTop && lay.row1Bottom <= lay.statsBottom, "2행: 숫자 카드 5개 한 줄 " + JSON.stringify(lay));
+    assert(lay.cellTops === 1 && lay.weekLeft < lay.logLeft && lay.dow === "일월화수목금토" && lay.hrefs && lay.states && lay.log, "3행: 이번 주 7칸(일~토)·지난 7일 기록(접힘) " + JSON.stringify(lay));
+    assert(lay.mainW > 1100 && lay.mainW <= 1400.5 && lay.mainLeft >= 220, "본문이 사이드바 오른쪽 남은 폭을 씀(최대 1400px) " + lay.mainW);
+    await page.evaluate(`document.querySelector('#weekCells a').click(); true`);
+    await page.waitFor(`location.pathname === '/plan' && location.hash === '#calendar'`, "이번 주 칸 → /plan#calendar");
+    await page.waitFor(`document.querySelectorAll('#calendar .cal-cell').length >= 28 && document.getElementById('dailyNotes').value !== ''`, "계획·캘린더 불러오기 끝");
+    await logOut();
+    await logIn("admin", "admin-pass-1");
+    await page.goto(base + "/");
+    await page.waitFor(`document.querySelectorAll('#stats .stat').length === 5 && document.getElementById('todayList')`, "관리자 홈");
+    const same = await page.evaluate(`(async () => {
+      const t = (await api('/api/today')).data, rw = (await api('/api/review-week')).data;
+      const sum = (k) => t.week.reduce((a, d) => ({ n: a.n + d[k].n, r: a.r + d[k].right }), { n: 0, r: 0 });
+      const pct = (x) => (x.n ? Math.round((x.r / x.n) * 100) + '%' : '-');
+      const want = { streak: t.streak + '일', planPct: rw.weeks[0].plan_pct === null ? '-' : rw.weeks[0].plan_pct + '%', oxRate: pct(sum('ox')), quizRate: pct(sum('quiz')), dueCount: t.review.due_count + '개' };
+      const got = Object.fromEntries([...document.querySelectorAll('#stats .stat')].map((s) => [s.dataset.stat, s.querySelector('.stat-value').textContent]));
+      return JSON.stringify(want) === JSON.stringify(got) ? '' : JSON.stringify({ want, got });
+    })()`);
+    assert(same === "", "숫자 카드가 기존 API 값과 다름: " + same);
+  });
+
+  await scenario("질문 버튼: 모든 화면 오른쪽 아래, 누르면 패널이 열리고 '자기주식' 결과가 패널에 보이며 주소는 그대로, Esc·닫기, /#ask 는 홈+패널 열림", async () => {
+    await page.viewport(1280, 900, false);
     for (const path of ["/", "/study", "/ox", "/toc", "/plan", "/review-week", "/account", "/start"]) {
       await page.goto(base + path);
-      await page.waitFor(ready, `메뉴 ${path}`);
-      assert((await page.evaluate(groupLabels)) === "홈,배우기,풀기,복습,계획", `${path}: 그룹이 다름`);
-      assert(await page.evaluate(`document.querySelectorAll('.topbar').length === 1 && !document.querySelector('.topbar .tab, .topbar .tab-link')`), `${path}: 옛 탭이 남아 있음`);
+      await page.waitFor(`document.getElementById('askFab') && document.getElementById('userName')`, `질문 버튼 ${path}`);
+      const fab = await page.evaluate(`(() => { const b = document.getElementById('askFab').getBoundingClientRect(); return { right: innerWidth - b.right, bottom: innerHeight - b.bottom, fixed: getComputedStyle(document.getElementById('askFab')).position, text: document.getElementById('askFab').textContent, round: getComputedStyle(document.getElementById('askFab')).borderRadius }; })()`);
+      assert(fab.fixed === "fixed" && fab.right < 40 && fab.bottom < 40 && fab.text === "질문" && fab.round === "999px", `${path}: 질문 버튼 위치 ${JSON.stringify(fab)}`);
+      assert(await page.evaluate(`document.getElementById('askDrawer').hidden`), `${path}: 처음엔 닫혀 있음`);
+      await page.evaluate(`document.getElementById('askFab').click(); true`);
+      assert(await page.evaluate(`!document.getElementById('askDrawer').hidden && document.activeElement.id === 'q' && location.pathname === ${JSON.stringify(path)} && location.hash === ''`), `${path}: 패널 열림·주소 그대로`);
+      await page.press("Escape");
+      assert(await page.evaluate(`document.getElementById('askDrawer').hidden && document.activeElement.id === 'askFab'`), `${path}: Esc 로 닫힘`);
     }
-    await page.goto(base + "/");
-    await page.waitFor(ready, "메뉴 /");
-    const open = (key) => page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').getAttribute('aria-expanded') === 'true' && !document.getElementById('menu-${key}').hidden`);
-    const closed = (key) => page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').getAttribute('aria-expanded') === 'false' && document.getElementById('menu-${key}').hidden`);
-    assert(await page.evaluate(`document.querySelector('.nav-groups li[data-group="home"] a.nav-btn') && !document.querySelector('.nav-btn[data-group="home"]')`), "홈은 드롭다운 없이 바로 이동하는 링크");
-    await page.hover('.nav-btn[data-group="learn"]');
-    assert(await closed("learn"), "hover 만으로 메뉴가 열림");
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="learn"]').click(); true`);
-    assert(await open("learn"), "클릭해도 안 열림");
-    await page.press("Escape");
-    assert(await closed("learn") && (await page.evaluate(`document.activeElement.dataset.group`)) === "learn", "Esc 로 닫히고 포커스가 그룹 버튼으로 돌아와야 함");
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="learn"]').click(); true`);
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="solve"]').click(); true`);
-    assert((await closed("learn")) && (await open("solve")), "다른 그룹을 누르면 앞 메뉴가 닫히고 새 메뉴가 열려야 함");
-    await page.evaluate(`document.querySelector('main').click(); true`);
-    assert(await closed("solve"), "바깥 클릭으로 안 닫힘");
-    // 키보드: Tab 으로 그룹 버튼에 가서 Enter/Space 로 열고, ↓·Tab 으로 항목 이동, Esc 로 닫기
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="review"]').focus(); true`);
-    await page.press("Enter");
-    assert(await open("review"), "Enter 로 안 열림");
-    await page.press("Escape");
-    await page.press(" ");
-    assert(await open("review"), "Space 로 안 열림");
-    await page.press("ArrowDown");
-    assert((await page.evaluate(`document.activeElement.textContent`)) === "오답노트", "↓ 로 첫 항목에 포커스");
-    await page.press("Tab");
-    assert((await page.evaluate(`document.activeElement.textContent`)) === "주간 돌아보기" && (await open("review")), "Tab 으로 다음 항목, 메뉴는 열린 채");
-    await page.press("Escape");
-    assert(await closed("review"), "항목에서 Esc 로 닫힘");
-    assert(await page.evaluate(`document.querySelector('.nav-btn[data-group="review"]').getAttribute('aria-haspopup') === 'true' && document.querySelector('.nav-btn[data-group="review"]').getAttribute('aria-controls') === 'menu-review'`), "aria 속성");
-    // 스크린샷: 라이트·다크 드롭다운, 계정 메뉴
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="solve"]').click(); true`);
-    await page.shotTo("메뉴-풀기-light", NAV_SHOTS);
-    await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
-    await sleep(250);
-    await page.shotTo("메뉴-풀기-dark", NAV_SHOTS);
-    await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
-    await page.evaluate(`document.getElementById('userName').click(); true`);
-    assert(await page.evaluate(`!document.getElementById('menu-account').hidden && !!document.getElementById('accountLink') && !!document.getElementById('adminLink') && !!document.getElementById('logoutBtn')`), "계정 메뉴: 내 계정·계정 관리(관리자)·로그아웃");
-    await page.shotTo("메뉴-계정-light", NAV_SHOTS);
-  });
-
-  await scenario("상단 메뉴: 세부 메뉴가 올바른 화면·탭으로 가고 해당 그룹이 보라색으로 켜짐", async () => {
-    await page.viewport(1100, 900, false);
-    const items = [["learn", "배우기", "/study", "/study", ""], ["learn", "배우기", "/#words", "/", "#words"], ["solve", "풀기", "/ox", "/ox", ""], ["solve", "풀기", "/#answers", "/", "#answers"],
-      ["solve", "풀기", "/#mock", "/", "#mock"], ["solve", "풀기", "/toc", "/toc", ""], ["review", "복습", "/#notebook", "/", "#notebook"], ["review", "복습", "/review-week", "/review-week", ""],
-      ["plan", "계획", "/plan", "/plan", ""], ["plan", "계획", "/#analysis", "/", "#analysis"]];
-    const panelOf = { "#words": "words", "#answers": "answers", "#mock": "mock", "#notebook": "notebook", "#analysis": "analysis" };
-    for (const [key, label, href, path, hash] of items) {
-      await page.goto(base + "/");
-      await page.waitFor(`document.getElementById('userName') && document.querySelector('.nav-btn[data-group="${key}"]')`, "메뉴");
-      await page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').click(); document.querySelector('#menu-${key} a[href="${href}"]').click(); true`);
-      await page.waitFor(`location.pathname === '${path}' && location.hash === '${hash}' && document.getElementById('userName')`, `이동 ${href}`);
-      await page.waitFor(`(document.querySelector('.topbar .nav-btn.active') || {}).textContent === '${label}'`, `${href}: '${label}' 그룹이 켜짐`);
-      assert(await page.evaluate(`document.querySelectorAll('.topbar .nav-btn.active').length === 1 && document.querySelector('#menu-${key} a[aria-current="page"]').getAttribute('href') === '${href}'`), `${href}: 활성 그룹·현재 항목 표시`);
-      if (hash) assert(await page.evaluate(`document.getElementById('${panelOf[hash]}').classList.contains('active') && !document.getElementById('today').closest('.panel').classList.contains('active')`), `${href}: ${panelOf[hash]} 탭이 열려야 함`);
-    }
-    // 홈: 다른 곳에서 '홈'을 누르면 오늘의 공부 / ,  /#ask 도 홈 그룹
     await page.goto(base + "/study");
-    await page.waitFor(`document.getElementById('userName')`, "메뉴");
-    await page.evaluate(`document.querySelector('.nav-groups li[data-group="home"] a').click(); true`);
-    await page.waitFor(`location.pathname === '/' && location.hash === '' && document.getElementById('todayList')`, "홈 이동");
-    assert(await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent === '홈' && document.getElementById('askBox').hidden`), "홈 그룹 활성·질문창 숨김");
+    await page.waitFor(`document.getElementById('askFab')`, "공부 화면");
+    await page.evaluate(`document.getElementById('askFab').click(); true`);
+    assert((await page.evaluate(`document.getElementById('q').placeholder`)).startsWith("궁금한 것을 물어보세요. 예: 자기주식은 어떻게 처리해?"), "입력창 안내 문구");
+    await page.evaluate(`document.getElementById('q').value = '자기주식'; document.getElementById('ask').click(); true`);
+    await page.waitFor(`document.getElementById('answer').textContent.includes('주제 요약 카드') && document.querySelectorAll('#answer .hit').length > 0`, "'자기주식' 결과");
+    assert(await page.evaluate(`document.getElementById('askDrawer').contains(document.querySelector('#answer .hit')) && document.getElementById('answer').textContent.includes('자기주식') && location.pathname === '/study' && location.hash === '' && !!document.getElementById('scope') && !!document.getElementById('recent')`), "결과가 패널 안에 보이고 주소 그대로(검색 범위·최근 질문 포함)");
+    assert(await page.evaluate(`[...document.querySelectorAll('#recent .chip')].some((c) => c.textContent === '자기주식')`), "최근 질문 칩");
+    await page.shotTo("질문패널-1280-light", NAV_SHOTS);
+    await page.evaluate(`document.getElementById('askClose').click(); true`);
+    assert(await page.evaluate(`document.getElementById('askDrawer').hidden`), "닫기 버튼");
     await page.goto(base + "/#ask");
-    await page.waitFor(`!document.getElementById('askBox').hidden && document.querySelector('.topbar .nav-btn.active')`, "/#ask");
-    assert((await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent`)) === "홈", "/#ask 는 홈 그룹");
-    // 같은 화면에서 메뉴로 탭을 바꿔도 활성 그룹이 따라감(해시 변경)
-    await page.goto(base + "/");
-    await page.waitFor(`document.getElementById('userName')`, "메뉴");
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="review"]').click(); document.querySelector('#menu-review a[href="/#notebook"]').click(); true`);
-    await page.waitFor(`document.querySelector('.topbar .nav-btn.active').textContent === '복습'`, "복습 활성");
-    await page.evaluate(`document.querySelector('.nav-btn[data-group="solve"]').click(); document.querySelector('#menu-solve a[href="/#mock"]').click(); true`);
-    await page.waitFor(`document.querySelector('.topbar .nav-btn.active').textContent === '풀기' && document.getElementById('mock').classList.contains('active')`, "같은 화면에서 풀기·모의고사로 전환");
-    // 계획·캘린더 합침
-    await page.goto(base + "/calendar");
-    await page.waitFor(`location.pathname === '/plan' && location.hash === '#calendar' && document.getElementById('calGrid')`, "/calendar → /plan#calendar");
-    const place = await page.evaluate(`(() => { const top = (id) => document.getElementById(id).getBoundingClientRect().top + scrollY; return { exam: top('examDate'), daily: top('dailyOx'), week: top('weekLink'), grid: top('calendar'), days: top('calGrid') }; })()`);
-    assert(place.exam < place.grid && place.daily < place.grid && place.week > place.grid - 1 && place.week < place.days, "계획(위)·하루 분량 설정·캘린더(아래) 순서와 주간 돌아보기 링크 위치: " + JSON.stringify(place));
-    assert(await page.evaluate(`document.querySelector('.topbar .nav-btn.active').textContent === '계획'`), "계획 그룹 활성");
-    await page.goto(base + "/");
-    await page.waitFor(`document.getElementById('calendarLink')`, "카드 링크");
-    assert(await page.evaluate(`document.getElementById('calendarLink').getAttribute('href') === '/plan' && document.getElementById('calendarLink').textContent === '계획 세우기'`), "계획 없으면 카드 링크는 /plan");
-  });
-
-  await scenario("상단 메뉴: 계정 드롭다운에서 내 계정·로그아웃이 동작", async () => {
+    await page.waitFor(`!document.getElementById('askDrawer').hidden && document.getElementById('today')`, "/#ask → 홈 + 패널 열림");
+    assert((await page.evaluate(activeSide)) === "/", "/#ask 에서는 홈 항목 강조");
+    await page.viewport(390, 844, true);
+    await page.goto(base + "/study");
+    await page.waitFor(`document.getElementById('askFab')`, "모바일 공부");
+    await page.evaluate(`document.getElementById('askFab').click(); true`);
+    const full = await page.evaluate(`(() => { const b = document.getElementById('askDrawer').getBoundingClientRect(); return b.width === innerWidth && b.height === innerHeight; })()`);
+    assert(full, "390px: 질문 패널이 전체 화면");
+    await page.shotTo("질문패널-390-mobile", NAV_SHOTS);
     await page.viewport(1100, 900, false);
-    await page.goto(base + "/");
-    await page.waitFor(`document.getElementById('userName')`, "계정 버튼");
-    assert(await page.evaluate(`document.getElementById('menu-account').hidden && document.getElementById('userName').getAttribute('aria-expanded') === 'false'`), "처음에는 닫혀 있음");
-    await page.evaluate(`document.getElementById('userName').click(); true`);
-    await page.press("Escape");
-    assert(await page.evaluate(`document.getElementById('menu-account').hidden`), "Esc 로 닫힘");
-    await page.evaluate(`document.getElementById('userName').click(); document.getElementById('accountLink').click(); true`);
-    await page.waitFor(`location.pathname === '/account' && document.getElementById('userName')`, "내 계정으로 이동");
-    await page.evaluate(`document.getElementById('userName').click(); true`);
-    await page.evaluate(`document.getElementById('logoutBtn').click(); true`);
-    await page.waitFor(`location.pathname === '/login'`, "로그아웃");
-    await logIn("admin", "admin-pass-1");
   });
 
-  await scenario("상단 메뉴: 1280·1000·390·320px 에서 한 줄에 들어가고 가로 스크롤이 없으며 드롭다운이 화면 안에 열림", async () => {
-    for (const [width, mobile] of [[1280, false], [1000, false], [390, true], [320, true]]) {
-      await page.viewport(width, 800, mobile);
-      for (const path of ["/", "/plan", "/study"]) {
+  await scenario("반응형: 1440·1000 은 사이드바 항상 보임, 390 은 ☰ 서랍(Esc·바깥 클릭·항목 선택으로 닫힘), 가로 스크롤 없음, 라이트·다크 스크린샷", async () => {
+    for (const [width, height, mobile] of [[1440, 900, false], [1000, 800, false], [390, 844, true], [320, 640, true]]) {
+      await page.viewport(width, height, mobile);
+      for (const path of ["/", "/study", "/ox", "/toc", "/plan", "/review-week", "/account", "/start"]) {
         await page.goto(base + path);
-        await page.waitFor(`document.querySelectorAll('.topbar .nav-groups .nav-btn').length === 5 && document.getElementById('userName')`, `${width}px ${path} 메뉴`);
-        const r = await page.evaluate(`(() => {
-          const btns = [...document.querySelectorAll('.topbar .nav-btn')].map((b) => b.getBoundingClientRect());
-          const bar = document.querySelector('.topbar').getBoundingClientRect();
-          return { n: btns.length, left: Math.min(...btns.map((b) => b.left)), right: Math.max(...btns.map((b) => b.right)), midMin: Math.min(...btns.map((b) => (b.top + b.bottom) / 2)), midMax: Math.max(...btns.map((b) => (b.top + b.bottom) / 2)),
-                   height: bar.height, scroll: document.documentElement.scrollWidth <= window.innerWidth + 1 };
-        })()`);
-        assert(r.n === 6 && r.left >= 0 && r.right <= width + 0.5, `${width}px ${path}: 메뉴가 화면 밖으로 나감 ${JSON.stringify(r)}`);
-        assert(r.midMax - r.midMin < 6 && r.height < 80, `${width}px ${path}: 한 줄이 아님 ${JSON.stringify(r)}`);
-        assert(r.scroll, `${width}px ${path}: 가로 스크롤 ${JSON.stringify(r)}`);
+        await page.waitFor(`document.querySelectorAll('.sidebar .side-link').length === 11 && document.getElementById('userName')`, `${width}px ${path}`);
+        const r = await page.evaluate(`(() => { const s = document.querySelector('.sidebar').getBoundingClientRect(), t = document.querySelector('.topbar').getBoundingClientRect(), tg = document.getElementById('sideToggle'); return { sideLeft: s.left, sideRight: s.right, bar: t.height, scroll: document.documentElement.scrollWidth <= window.innerWidth + 1, toggle: getComputedStyle(tg).display !== 'none', user: document.getElementById('userName').getBoundingClientRect().right <= innerWidth + 0.5 }; })()`);
+        assert(r.scroll && r.user && r.bar < 80, `${width}px ${path}: 가로 스크롤·상단 바 ${JSON.stringify(r)}`);
+        if (width > 900) assert(r.sideLeft === 0 && !r.toggle, `${width}px ${path}: 사이드바가 항상 보여야 함 ${JSON.stringify(r)}`);
+        else assert(r.sideRight <= 0 && r.toggle, `${width}px ${path}: 사이드바는 숨고 ☰ 가 보여야 함 ${JSON.stringify(r)}`);
       }
       await page.goto(base + "/");
-      await page.waitFor(`document.getElementById('userName')`, "메뉴");
-      for (const key of ["learn", "plan"]) {
-        await page.evaluate(`document.querySelector('.nav-btn[data-group="${key}"]').click(); true`);
-        const m = await page.evaluate(`(() => { const b = document.getElementById('menu-${key}').getBoundingClientRect(); return { left: b.left, right: b.right, width: b.width }; })()`);
-        assert(m.left >= 0 && m.right <= width + 0.5 && m.width > 40, `${width}px: '${key}' 드롭다운이 화면 밖으로 나감 ${JSON.stringify(m)}`);
+      await page.waitFor(`document.getElementById('todayList') && document.querySelectorAll('#stats .stat').length === 5 && document.querySelectorAll('#weekCells a').length === 7`, `${width}px 홈`);
+      if (width <= 900) {
+        const drawer = () => page.evaluate(`document.getElementById('sidebar').getBoundingClientRect().left === 0 && document.getElementById('sideToggle').getAttribute('aria-expanded') === 'true'`);
+        await page.evaluate(`document.getElementById('sideToggle').click(); true`);
+        await sleep(300);
+        assert(await drawer(), `${width}px: ☰ 로 서랍이 열려야 함`);
+        assert(await page.evaluate(`[...document.querySelectorAll('.sidebar .side-link')].every((a) => a.getBoundingClientRect().right <= 221 && a.getBoundingClientRect().width > 40)`), `${width}px: 서랍 항목 전부 보임`);
+        if (width === 390) await page.shotTo("서랍-390-mobile", NAV_SHOTS);
+        await page.press("Escape");
+        await sleep(300);
+        assert(!(await drawer()), `${width}px: Esc 로 서랍이 닫혀야 함`);
+        await page.evaluate(`document.getElementById('sideToggle').click(); true`);
+        await sleep(300);
+        await page.evaluate(`document.querySelector('.side-backdrop').click(); true`);
+        await sleep(300);
+        assert(!(await drawer()), `${width}px: 바깥 클릭으로 서랍이 닫혀야 함`);
+        await page.evaluate(`document.getElementById('sideToggle').click(); true`);
+        await sleep(300);
+        await page.evaluate(`[...document.querySelectorAll('.sidebar .side-link')].find((a) => a.textContent === 'O/X').click(); true`);
+        await page.waitFor(`location.pathname === '/ox'`, `${width}px: 항목 선택 이동`);
+        await sleep(300);
+        assert(!(await page.evaluate(`document.getElementById('sidebar').classList.contains('open')`)), `${width}px: 항목을 고르면 서랍이 닫혀야 함`);
+        await page.goto(base + "/");
+        await page.waitFor(`document.getElementById('todayList')`, "홈");
       }
-      await page.evaluate(`document.getElementById('userName').click(); true`);
-      const a = await page.evaluate(`(() => { const b = document.getElementById('menu-account').getBoundingClientRect(); return { left: b.left, right: b.right }; })()`);
-      assert(a.left >= 0 && a.right <= width + 0.5, `${width}px: 계정 드롭다운이 화면 밖으로 나감 ${JSON.stringify(a)}`);
-      if (width === 390 || width === 320) { await page.evaluate(`document.querySelector('.nav-btn[data-group="plan"]').click(); true`); await page.shotTo(`메뉴-${width}-mobile`, NAV_SHOTS); }
+      if (width !== 320) {
+        await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+        await sleep(200);
+        await page.shotTo(`홈-${width}-${mobile ? "mobile-" : ""}light`, DASH_SHOTS);
+        await page.emulate([{ name: "prefers-color-scheme", value: "dark" }]);
+        await sleep(250);
+        await page.shotTo(`홈-${width}-${mobile ? "mobile-" : ""}dark`, DASH_SHOTS);
+        await page.emulate([{ name: "prefers-color-scheme", value: "light" }]);
+      }
     }
     await page.viewport(1100, 900, false);
   });

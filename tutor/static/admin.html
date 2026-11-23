@@ -8,7 +8,7 @@
 </head>
 <body>
 <div id="topbar"></div>
-<main>
+<main class="reading">
 <section class="paper">
   <h2>계정 관리</h2>
   <p class="small">관리자만 볼 수 있습니다. 공개 회원가입은 없고, 여기서 만든 계정만 로그인할 수 있습니다. 계정마다 풀이 기록·오답노트·공부 진도가 따로 쌓입니다.</p>
@@ -33,6 +33,7 @@
 </main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
 function draw(users) {
   $("resetUser").replaceChildren(...users.map((u) => el("option", { value: String(u.id), textContent: `${u.username} (${u.name})` })));

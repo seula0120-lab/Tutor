@@ -10,23 +10,16 @@
 <div id="topbar"></div>
 <main>
 <div id="ask-panel" class="panel active">
-<section id="today" class="box today-card" aria-label="오늘의 공부"></section>
-<div id="askBox" hidden>
-<h1>전산세무 1급 이론 튜터</h1>
-<div class="sub">이론 30점 영역 · 기출 문항 검색과 공식 해설 · 로컬(127.0.0.1)에서만 동작 · <a id="glossaryReviewLink" href="/glossary-review">용어 사전 검토</a></div>
-<div>
-  <textarea id="q" aria-label="질문" placeholder="궁금한 것을 물어보세요. 예: 자기주식은 어떻게 처리해? / 수출하면 부가세가 0%라는데 무슨 뜻이야?"></textarea>
-  <div class="row">
-    <button id="ask">질문하기</button>
-    <label class="small">검색 범위
-      <select id="scope"><option value="all">전체 회차</option><option value="10">최신 10회분</option></select>
-    </label>
+<div id="dash">
+  <div class="dash-row dash-row1">
+    <section id="today" class="box today-card" aria-label="오늘의 공부"></section>
+    <section id="examCard" class="exam-card" aria-label="시험일"></section>
   </div>
-  <div id="recent" class="small" style="margin-top:8px"></div>
-  <div id="favs" class="small" style="margin-top:4px"></div>
-  <div class="small" style="margin-top:6px">요약 카드는 API 키 없이 동작합니다. API 키가 있으면 카드의 문장 모음이 Anthropic API 로 전송되어 3~5줄 설명이 덧붙고, 사용량에 따라 비용이 듭니다.</div>
-  <div id="answer"></div>
-</div>
+  <div class="dash-stats" id="stats" aria-label="공부 현황"></div>
+  <div class="dash-row dash-row3">
+    <section id="weekPlan" class="box" aria-label="이번 주 계획"><h2>이번 주 계획</h2><div id="weekCells" class="cal-grid week-cells"></div></section>
+    <section id="weekLog" class="box" aria-label="지난 7일 기록"></section>
+  </div>
 </div>
 </div>
 
@@ -95,150 +88,21 @@
 </main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
-// ---- 화면 전환: 해시로 연다. 해시 없는 / 는 홈(오늘의 공부), /#ask 는 질문창, 나머지는 각 패널(/#answers 등). 메뉴는 nav.js 가 그린다. ----
+// ---- 화면 전환: 해시로 연다. 해시 없는 / 와 /#ask 는 홈 대시보드(/#ask 는 질문 패널도 연다, ask.js), 나머지는 각 패널(/#answers 등). 메뉴는 nav.js 가 그린다. ----
 const PANELS = ["answers", "notebook", "mock", "analysis", "words"];
 function showTab(name) {                                         // 코드에서 직접 열 때도 주소(해시)를 맞춘다
-  const target = PANELS.includes(name) ? name : name === "ask" ? "ask" : "";
+  const target = PANELS.includes(name) ? name : "";
   history.replaceState(null, "", location.pathname + location.search + (target ? "#" + target : ""));
   applyHash();
 }
 function applyHash() {
   const name = location.hash.slice(1);
-  const panel = PANELS.includes(name) ? name : "ask";               // ask-panel = 오늘의 공부 + (#ask 일 때만) 질문창
+  const panel = PANELS.includes(name) ? name : "ask";               // ask-panel = 홈 대시보드
   document.querySelectorAll(".panel").forEach((p) => p.classList.toggle("active", p.id === panel || p.id === panel + "-panel"));
   if (name === "notebook") loadNotebook();                           // 패널을 열 때마다 새로 불러오는 것들
   if (name === "mock") loadMockHistory();
-  $("askBox").hidden = name !== "ask";                              // 질문 입력창은 /#ask 에서만 보인다. 홈(/)은 오늘의 공부가 주인공
-}
-
-// ---- 질문창 ----
-let lastAsk = { q: "", scope: "all" };
-async function runAsk(q, scope) {
-  q = q.trim();
-  if (!q) return;
-  $("ask").disabled = true;
-  $("answer").replaceChildren(el("div", { className: "small", textContent: "찾는 중…" }));
-  const { data } = await api("/api/ask", { q, scope });
-  $("ask").disabled = false;
-  lastAsk = { q, scope };
-  if (!data.error) rememberQuery(q);
-  renderAnswer(data);
-}
-$("ask").addEventListener("click", () => runAsk($("q").value, $("scope").value));
-
-// ---- 최근 질문(브라우저 localStorage, 쓸 수 없어도 정상 동작) ----
-const RECENT_KEY = "tutorRecentQueries";
-function readRecent() {
-  try { const v = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); return Array.isArray(v) ? v.filter((x) => typeof x === "string").slice(0, 10) : []; }
-  catch (e) { return []; }
-}
-function rememberQuery(q) {
-  try { localStorage.setItem(RECENT_KEY, JSON.stringify([q, ...readRecent().filter((x) => x !== q)].slice(0, 10))); } catch (e) { /* 저장 실패는 무시 */ }
-  renderRecent();
-}
-function renderRecent() {
-  const box = $("recent");
-  const items = readRecent();
-  box.replaceChildren(el("b", { textContent: "최근 질문 " }), ...(items.length ? items.map((q) => {
-    const b = el("button", { className: "ghost chip", textContent: q });
-    b.addEventListener("click", () => { $("q").value = q; runAsk(q, $("scope").value); });
-    return b;
-  }) : [el("span", { textContent: "(없음)" })]));
-}
-
-// ---- 즐겨찾기(서버 DB) ----
-async function loadFavorites() {
-  const { data } = await api("/api/favorites");
-  const box = $("favs");
-  box.replaceChildren(el("b", { textContent: "즐겨찾기 " }), ...(data.favorites.length ? data.favorites.map((f) => {
-    const open = el("button", { className: "ghost chip", textContent: "★ " + f.query });
-    open.addEventListener("click", () => { $("q").value = f.query; $("scope").value = f.scope; runAsk(f.query, f.scope); });
-    const del = el("button", { className: "ghost chip", textContent: "삭제", title: "즐겨찾기에서 삭제" });
-    del.addEventListener("click", async () => { await api("/api/favorites/delete", { q: f.query }); loadFavorites(); updateStar(); });
-    return el("span", { style: "white-space:nowrap" }, open, del, " ");
-  }) : [el("span", { textContent: "(없음)" })]));
-  window.favoriteQueries = new Set(data.favorites.map((f) => f.query));
-}
-async function updateStar() {
-  const star = $("starBtn");
-  if (!star) return;
-  star.textContent = window.favoriteQueries.has(lastAsk.q) ? "★ 즐겨찾기 해제" : "☆ 즐겨찾기";
-}
-
-function renderAnswer(data) {
-  const box = $("answer");
-  box.replaceChildren();
-  if (data.error) { box.append(el("div", { className: "result-wrong", textContent: data.error })); return; }
-  if (data.no_direct) box.append(el("div", { className: "notice", textContent: "이 주제를 직접 다룬 기출을 찾지 못했습니다. 아래는 일부 낱말만 겹치는 문항일 수 있습니다." }));
-  box.append(renderSummary(data.summary));
-  const ai = data.ai;
-  if (ai && ai.status === "ok") {
-    box.append(el("div", { className: "small", textContent: "AI 설명 (요약 카드의 문장만 근거로, 출처는 회차-문항)" }),
-               el("div", { className: "ai", textContent: ai.text }));
-    if (ai.ungrounded.length) box.append(el("div", { className: "notice", textContent: "주의: 검색 근거에 없는 출처가 인용됐습니다: " + ai.ungrounded.join(", ") }));
-    box.append(el("div", { className: "small", textContent: ai.message }));
-  } else if (ai && ai.message) {
-    box.append(el("div", { className: "notice", textContent: ai.message }));
-  }
-  const s = data.search;
-  const info = `검색 범위: ${s.scope} · 검색어: ${s.terms.join(", ") || "-"}` + (s.expanded.length ? ` · 일상어 확장: ${s.expanded.join(", ")}` : "");
-  box.append(el("div", { className: "small", style: "margin-top:8px", textContent: info }));
-  if (s.note) box.append(el("div", { className: "notice", textContent: s.note }));
-  for (const r of s.results) {
-    const row = el("div", { className: "hit" });
-    row.append(el("div", { className: "meta", textContent: `출처 ${r.id} (${r.round}회 ${r.number}번) · ${[r.subject, r.tax, r.unit].filter(Boolean).join(" › ")}` }),
-               ...(r.tax_notice ? [el("span", { className: "taxflag", textContent: r.tax_notice })] : []), ...basisBadges(r),
-               el("div", { textContent: r.question }));
-    const open = el("button", { className: "ghost", textContent: "문제·해설 열기" });
-    open.style.marginTop = "4px";
-    open.addEventListener("click", () => { showTab("answers"); loadQuestion(r.round, r.number); });
-    row.append(open);
-    box.append(row);
-  }
-}
-
-function sentenceList(items) {
-  if (!items.length) return el("div", { className: "small", textContent: "해당 문장이 없습니다." });
-  const ul = el("ul");
-  for (const it of items) {
-    const li = el("li", {}, ...highlight(it.text, it.matched), " ", el("span", { className: "src", textContent: `(${it.sources.join(", ")}${it.count > 1 ? ` · ${it.count}회 출제` : ""} · 핵심어 ${it.matched.join(", ")})` }));
-    if (it.tax_notice) li.append(" ", el("span", { className: "taxflag", textContent: it.tax_notice }));
-    li.append(" ", ...basisBadges(it));
-    ul.append(li);
-  }
-  return ul;
-}
-function renderSummary(sm) {
-  const card = el("div", { className: "card" });
-  const cv = sm.coverage;
-  card.append(el("b", { textContent: "주제 요약 카드 " }));
-  const star = el("button", { id: "starBtn", className: "ghost chip" });
-  star.addEventListener("click", async () => {
-    const saved = window.favoriteQueries.has(lastAsk.q);
-    await api(saved ? "/api/favorites/delete" : "/api/favorites", { q: lastAsk.q, scope: lastAsk.scope });
-    await loadFavorites();
-    updateStar();
-  });
-  card.append(star);
-  setTimeout(updateStar, 0);
-  if (!cv.questions) { card.append(el("div", { className: "small", textContent: "요약할 관련 기출이 없습니다." })); return card; }
-  card.append(el("div", { className: "small", textContent: `출제 현황: 관련 기출 ${cv.questions}문항 · ${cv.round_count}개 회차(${cv.rounds.join(", ")}회) · 가장 최근 ${cv.latest_round}회` }));
-  if (sm.tax_notice) card.append(el("div", {}, el("span", { className: "taxflag", textContent: sm.tax_notice })));
-  const ok = el("div", { className: "okc" }, el("h3", { textContent: "맞는 문장 (시험에서 옳다고 인정된 내용)" }), sentenceList(sm.right));
-  const trap = el("div", { className: "trap" }, el("h3", { textContent: "자주 나온 함정 (틀린 문장으로 출제된 내용)" }), sentenceList(sm.traps));
-  card.append(ok, trap);
-  if (sm.excluded.length) {
-    const ul = el("ul");
-    for (const e of sm.excluded) ul.append(el("li", {}, `${e.id} [${e.kind}] ${e.question.slice(0, 60)}${e.question.length > 60 ? "…" : ""}`));
-    card.append(el("h3", { textContent: "문장 요약에서 제외한 문항 (계산·조합·식별형·전항 정답 처리)" }), ul);
-  }
-  const run = el("div", { id: "topicRun", style: "margin-top:8px" });
-  const go = el("button", { id: "topicGo", textContent: `이 주제 기출 풀기 (${sm.related_ids.length}문제)` });
-  go.addEventListener("click", () => runSession(sm.related_ids, run, "이 주제 기출"));
-  card.append(el("div", { className: "row" }, go), run);
-  card.append(el("div", { className: "small", textContent: "문항 유형(옳은/옳지 않은 것)은 문제 글의 낱말로 자동 판별하므로 틀릴 수 있습니다. 시험 판단은 공식 해설을 따르세요." }));
-  return card;
 }
 
 // ---- 문제 분석 탭 ----
@@ -463,13 +327,65 @@ async function loadToday() {
   card.replaceChildren(head, ...(unitLine ? [unitLine] : []),
     el("div", { className: "small", id: "todayMeta" }, "연속 공부 ", el("b", { id: "streakDays", textContent: `${data.streak}일` }), ` · 예정된 복습 ${data.review.waiting}개(아직 날짜 안 됨) · 복습 완료 ${data.review.done}개 · 오늘 ${data.date} · `,
       el("a", { id: "calendarLink", href: data.plan ? "/plan#calendar" : "/plan", textContent: data.plan ? "내 계획(캘린더)" : "계획 세우기" })),
-    list, week, settings, el("div", { className: "small", id: "todayMsg" }));
+    list, settings, el("div", { className: "small", id: "todayMsg" }));
+  $("weekLog").replaceChildren(week);
+  renderStats(data);
+}
+
+// ------------------------------------------------------------------ 홈 대시보드: 시험 카드·숫자 카드·이번 주 계획(기존 API 값만 쓴다. 기록이 없으면 '-')
+const STATE_NAME = { done: "완료", partial: "부분", missed: "미달", rest: "쉬는 날", future: "예정", exam: "시험일", empty: "계획 없음" };
+const DOW_NAME = ["일", "월", "화", "수", "목", "금", "토"];
+function renderExam(header) {
+  const has = header && header.exam_date;
+  const d = header ? header.dday : null;
+  const big = !has ? "시험일 미정" : d === 0 ? "D-DAY" : d > 0 ? `D-${d}` : `D+${-d}`;
+  $("examCard").replaceChildren(el("div", { className: "exam-label", textContent: "시험까지" }), el("div", { id: "examDday", className: "exam-dday", textContent: big }),
+    el("div", { id: "examDate", className: "exam-date", textContent: has ? header.exam_date : "시험일을 정하면 계획이 만들어집니다" }),
+    el("a", { id: "examLink", className: "btn exam-btn", href: has ? "/plan#calendar" : "/plan", textContent: has ? "계획 보기" : "계획 세우기" }));
+}
+function renderWeekPlan(cal) {
+  const days = cal.days, i = days.findIndex((d) => d.date === cal.today);
+  const box = $("weekCells");
+  if (i < 0) { box.replaceChildren(); return; }
+  box.replaceChildren(...days.slice(i - (i % 7), i - (i % 7) + 7).map((d) => {
+    const a = el("a", { className: "cal-cell" + (d.date === cal.today ? " today" : ""), href: "/plan?date=" + d.date + "#calendar" },
+      el("span", { className: "d", textContent: `${DOW_NAME[(d.weekday + 1) % 7]} ${d.date.slice(5).replace("-", "/")}` }),
+      el("span", { className: "sum", textContent: d.summary || "" }), el("span", { className: "st", textContent: STATE_NAME[d.state] || "" }));
+    a.dataset.state = d.state;
+    a.dataset.date = d.date;
+    return a;
+  }));
+}
+async function renderStats(today) {
+  const sum = (k) => today.week.reduce((t, d) => ({ n: t.n + d[k].n, right: t.right + d[k].right }), { n: 0, right: 0 });
+  const rate = (x) => (x.n ? Math.round((x.right / x.n) * 100) + "%" : "-");
+  const rw = await api("/api/review-week");
+  const pct = rw.ok && rw.data.weeks[0].plan_pct !== null ? rw.data.weeks[0].plan_pct + "%" : "-";
+  const cards = [["streak", "연속 공부 일수", `${today.streak}일`], ["planPct", "이번 주 계획 달성률", pct], ["oxRate", "O/X 정답률 (최근 7일)", rate(sum("ox"))],
+    ["quizRate", "기출 정답률 (최근 7일)", rate(sum("quiz"))], ["dueCount", "오늘 복습할 문제", `${today.review.due_count}개`]];
+  $("stats").replaceChildren(...cards.map(([key, label, value]) => {
+    const c = el("div", { className: "stat", id: "stat-" + key }, el("div", { className: "stat-label", textContent: label }), el("div", { className: "stat-value", textContent: value }));
+    c.dataset.stat = key;
+    return c;
+  }));
+}
+async function loadDash() {
+  const { ok, data } = await api("/api/calendar");
+  if (!ok) return;
+  renderExam(data.header);
+  renderWeekPlan(data);
 }
 loadToday();
+loadDash();
 
-loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); renderRecent(); loadFavorites();
+loadAnalysis(); loadStudyOrder(); loadUnits(); loadGlossary(); 
 applyHash();
 addEventListener("hashchange", applyHash);
+try {                                                                // 다른 화면의 질문 패널에서 '문제·해설 열기'로 넘어온 경우
+  const pending = JSON.parse(sessionStorage.getItem("openQuestion") || "null");
+  sessionStorage.removeItem("openQuestion");
+  if (pending) { showTab("answers"); loadQuestion(pending[0], pending[1]); }
+} catch (e) { /* 무시 */ }
 </script>
 </body>
 </html>

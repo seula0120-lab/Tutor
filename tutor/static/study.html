@@ -8,9 +8,10 @@
 </head>
 <body>
 <div id="topbar"></div>
-<main id="view"></main>
+<main id="view" class="reading"></main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
 const STATUS_LABEL = { "": "아직 안 봄", read: "읽음", understood: "이해함" };
 const unitHref = (unit) => "/study/" + encodeURIComponent(unit);
@@ -23,7 +24,7 @@ async function showOverview() {
   const { data } = await api("/api/study");
   const view = $("view");
   view.replaceChildren(el("h1", { textContent: "공부" }),
-    el("div", { className: "sub", textContent: "과목별 개념을 다시 잡는 학습 노트입니다. 기출 검색은 '질문' 탭에서 합니다." }));
+    el("div", { className: "sub", textContent: "과목별 개념을 다시 잡는 학습 노트입니다. 기출 검색은 오른쪽 아래 '질문' 버튼에서 합니다." }));
   view.append(roadmapBox(data.roadmap));
   const grid = el("div", { className: "subject-grid", id: "subjects" });
   for (const card of data.cards) grid.append(subjectCard(card));

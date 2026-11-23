@@ -1,6 +1,6 @@
-// 상단 메뉴(모든 화면 공용). 5개 그룹(홈·배우기·풀기·복습·계획)과 오른쪽 계정 메뉴를 만들어 #topbar 자리에 넣는다.
+// 화면 틀(모든 화면 공용): 왼쪽 사이드바(항상 펼침) + 상단 바(☰·다크 모드·사용자 메뉴). #topbar 자리에 넣는다.
 // quizcard.js(el·api)를 먼저 불러온 뒤 이 파일을 불러온다. 화면마다 따로 메뉴를 쓰지 않는다.
-// 드롭다운은 클릭/Enter/Space 로만 열린다(hover 로 열지 않음). Esc·바깥 클릭·다른 그룹 클릭·포커스가 밖으로 나가면 닫힌다.
+// 900px 이하에서는 사이드바가 숨고 ☰ 로 여는 서랍이 된다(Esc·바깥 클릭으로 닫힘). 사용자 메뉴는 클릭/Enter/Space 로만 열린다(hover 없음).
 const NAV_GROUPS = [
   { key: "home", label: "홈", items: [{ label: "홈", href: "/" }] },
   { key: "learn", label: "배우기", items: [{ label: "공부", href: "/study" }, { label: "단어 주석", href: "/#words" }] },
@@ -28,69 +28,61 @@ function navItemOf(path, hash) {
 }
 
 (function () {
-  const closeAll = (except) => {
-    document.querySelectorAll(".topbar [aria-expanded='true']").forEach((b) => { if (b !== except) { b.setAttribute("aria-expanded", "false"); b.nextElementSibling.hidden = true; } });
+  const THEME_KEY = "tutorTheme";
+  const savedTheme = () => { try { return localStorage.getItem(THEME_KEY); } catch (e) { return null; } };
+  const isDark = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+  if (savedTheme()) document.documentElement.dataset.theme = savedTheme();
+
+  const closeMenu = () => {
+    document.querySelectorAll(".topbar [aria-expanded='true']").forEach((b) => { b.setAttribute("aria-expanded", "false"); b.nextElementSibling.hidden = true; });
   };
-  // 메뉴가 화면 오른쪽 밖으로 나가면 안쪽으로 당긴다.
-  const keepInside = (menu) => {
-    if (menu.classList.contains("nav-menu-right")) { menu.style.left = "auto"; menu.style.right = "0px"; return; }      // 계정 메뉴는 오른쪽 끝에 맞춘다
-    menu.style.left = "0px";
-    const r = menu.getBoundingClientRect();
-    const shift = Math.min(0, document.documentElement.clientWidth - 8 - r.right);
-    menu.style.left = Math.max(shift, 8 - r.left) + "px";
-  };
-  const dropdown = (button, menu) => {
-    const wrap = el("div", { className: "nav-drop" }, button, menu);
-    menu.hidden = true;
-    button.setAttribute("aria-expanded", "false");
-    button.setAttribute("aria-haspopup", "true");
-    button.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const open = button.getAttribute("aria-expanded") === "true";
-      closeAll(open ? null : button);
-      button.setAttribute("aria-expanded", String(!open));
-      menu.hidden = open;
-      if (!open) keepInside(menu);
-    });
-    button.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowDown") { e.preventDefault(); if (menu.hidden) button.click(); menu.querySelector("a, button").focus(); }
-    });
-    wrap.addEventListener("focusout", (e) => { if (!wrap.contains(e.relatedTarget)) { button.setAttribute("aria-expanded", "false"); menu.hidden = true; } });
-    menu.addEventListener("click", () => { button.setAttribute("aria-expanded", "false"); menu.hidden = true; });
-    return wrap;
+  const setDrawer = (open) => {
+    document.querySelector(".sidebar").classList.toggle("open", open);
+    document.querySelector(".side-backdrop").hidden = !open;
+    document.getElementById("sideToggle").setAttribute("aria-expanded", String(open));
   };
 
-  function build() {
-    const groups = NAV_GROUPS.map((g) => {
-      if (g.items.length === 1) return el("li", { className: "nav-group" }, el("a", { className: "nav-btn", href: g.items[0].href, textContent: g.label }));
-      const button = el("button", { type: "button", className: "nav-btn", textContent: g.label });
-      const menu = el("ul", { className: "nav-menu" }, ...g.items.map((it) => el("li", {}, el("a", { href: it.href, textContent: it.label }))));
-      button.dataset.group = g.key;
-      menu.id = "menu-" + g.key;
-      button.setAttribute("aria-controls", menu.id);
-      return el("li", { className: "nav-group" }, dropdown(button, menu));
-    });
-    groups.forEach((li, i) => { li.dataset.group = NAV_GROUPS[i].key; });
-    return el("header", { className: "topbar" }, el("div", { className: "topbar-inner" },
-      el("a", { className: "brand", href: "/", textContent: "회계튜터" }, el("small", { textContent: " 전산세무 1급 이론" })),
-      el("nav", { className: "nav-groups", ariaLabel: "화면 이동" }, el("ul", {}, ...groups))));
+  function sidebar() {
+    const link = (it) => el("li", {}, el("a", { className: "side-link", href: it.href, textContent: it.label }));
+    const parts = [];
+    for (const g of NAV_GROUPS) {
+      if (g.items.length === 1 && g.key === "home") parts.push(el("ul", { className: "side-list" }, link(g.items[0])));
+      else parts.push(el("div", { className: "side-group", id: "side-" + g.key }, el("div", { className: "side-title", textContent: g.label }), el("ul", { className: "side-list" }, ...g.items.map(link))));
+    }
+    const out = el("button", { type: "button", id: "sideLogout", className: "side-logout", textContent: "로그아웃" });
+    out.addEventListener("click", async () => { await api("/api/logout", {}); location.href = "/login"; });
+    return el("aside", { className: "sidebar", id: "sidebar", ariaLabel: "화면 이동" },
+      el("a", { className: "brand", href: "/", textContent: "회계튜터" }),
+      el("nav", { className: "side-nav" }, ...parts), out);
   }
 
-  // 지금 주소에 맞게 활성 그룹(보라색 pill)과 현재 항목 표시를 다시 칠한다.
+  // 지금 주소에 맞는 항목(보라색)과 그룹 제목을 다시 칠한다.
   function mark() {
     const group = navGroupOf(location.pathname, location.hash), item = navItemOf(location.pathname, location.hash);
-    document.querySelectorAll(".topbar .nav-group").forEach((li) => {
-      const on = li.dataset.group === group;
-      const btn = li.querySelector(".nav-btn");
-      btn.classList.toggle("active", on);
-      if (on) btn.setAttribute("aria-current", "page"); else btn.removeAttribute("aria-current");
-    });
-    document.querySelectorAll(".topbar .nav-menu a").forEach((a) => {
-      const [p, h = ""] = a.getAttribute("href").split("#");
-      const here = item && item.href === a.getAttribute("href");
-      a.classList.toggle("current", !!here);
+    document.querySelectorAll(".sidebar .side-link").forEach((a) => {
+      const here = !!item && item.href === a.getAttribute("href");
+      a.classList.toggle("active", here);
       if (here) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
     });
+    document.querySelectorAll(".sidebar .side-group").forEach((g) => g.classList.toggle("on", g.id === "side-" + group));
+  }
+
+  function topbar() {
+    const toggle = el("button", { type: "button", id: "sideToggle", className: "side-toggle", textContent: "☰", title: "메뉴", ariaLabel: "메뉴 열기" });
+    toggle.setAttribute("aria-controls", "sidebar");
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.addEventListener("click", (e) => { e.stopPropagation(); setDrawer(!document.querySelector(".sidebar").classList.contains("open")); });
+    const theme = el("button", { type: "button", id: "themeBtn", className: "theme-btn" });
+    const paint = () => { theme.textContent = isDark() ? "라이트 모드" : "다크 모드"; theme.setAttribute("aria-pressed", String(isDark())); };
+    theme.addEventListener("click", () => {
+      const next = isDark() ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* 저장 실패는 무시 */ }
+      paint();
+    });
+    paint();
+    return el("header", { className: "topbar" }, el("div", { className: "topbar-inner" },
+      toggle, el("a", { className: "brand brand-top", href: "/", textContent: "회계튜터" }), el("span", { className: "topbar-gap" }), theme));
   }
 
   async function addAccount(bar) {
@@ -103,29 +95,45 @@ function navItemOf(path, hash) {
       el("li", {}, el("a", { id: "accountLink", href: "/account", textContent: "내 계정" })),
       ...(data.user.is_admin ? [el("li", {}, el("a", { id: "adminLink", href: "/admin", textContent: "계정 관리" }))] : []),
       el("li", {}, logout));
+    menu.hidden = true;
     button.setAttribute("aria-controls", "menu-account");
-    const box = el("div", { id: "userbox", className: "userbox" }, dropdown(button, menu));
-    bar.append(box);
+    button.setAttribute("aria-haspopup", "true");
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = button.getAttribute("aria-expanded") === "true";
+      closeMenu();
+      button.setAttribute("aria-expanded", String(!open));
+      menu.hidden = open;
+    });
+    button.addEventListener("keydown", (e) => { if (e.key === "ArrowDown") { e.preventDefault(); if (menu.hidden) button.click(); menu.querySelector("a, button").focus(); } });
+    const wrap = el("div", { className: "nav-drop" }, button, menu);
+    wrap.addEventListener("focusout", (e) => { if (!wrap.contains(e.relatedTarget)) closeMenu(); });
+    menu.addEventListener("click", closeMenu);
+    bar.append(el("div", { id: "userbox", className: "userbox" }, wrap));
     if (location.pathname === "/account") button.classList.add("active");
   }
 
   function mount() {
     const slot = document.getElementById("topbar");
     if (!slot) return;
-    const header = build();
+    const header = topbar();
     slot.replaceWith(header);
+    document.body.classList.add("has-side");
+    document.body.prepend(el("div", { className: "side-backdrop", hidden: true }), sidebar());
+    document.querySelector(".side-backdrop").addEventListener("click", () => setDrawer(false));
+    document.querySelector(".sidebar").addEventListener("click", (e) => { if (e.target.closest("a")) setDrawer(false); });
     mark();
     addAccount(header.querySelector(".topbar-inner"));
     addEventListener("hashchange", mark);
-    document.addEventListener("click", () => closeAll());
+    document.addEventListener("click", closeMenu);
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       const open = document.querySelector(".topbar [aria-expanded='true']");
-      if (!open) return;
-      closeAll();
-      open.focus();
+      if (open) { closeMenu(); open.focus(); return; }
+      if (document.querySelector(".sidebar.open")) { setDrawer(false); document.getElementById("sideToggle").focus(); }
     });
-    addEventListener("resize", () => { const o = document.querySelector(".topbar [aria-expanded='true']"); if (o) keepInside(o.nextElementSibling); });
+    addEventListener("resize", () => { if (innerWidth > 900) setDrawer(false); });
   }
   mount();
 })();

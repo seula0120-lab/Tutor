@@ -106,5 +106,7 @@ def test_planned_card_also_ordered_with_next(db):
 
 def test_home_hides_question_box_but_keeps_it_at_ask_tab():
     html = (STATIC / "index.html").read_text(encoding="utf-8")
-    assert 'id="askBox" hidden' in html and 'id="q"' in html and 'id="ask"' in html          # 기능은 남아 있다
-    assert 'name !== "ask"' in html
+    ask = (STATIC / "ask.js").read_text(encoding="utf-8")
+    assert 'id="askBox"' not in html and 'id="q"' not in html                                # 홈에는 질문창이 없고
+    assert 'id: "q"' in ask and 'id: "ask"' in ask and 'id: "askFab"' in ask               # 질문 버튼·패널(ask.js)이 모든 화면에서 만든다
+    assert 'location.hash === "#ask"' in ask

@@ -8,13 +8,14 @@
 </head>
 <body>
 <div id="topbar"></div>
-<main>
+<main class="reading">
 <h1>문제 목차</h1>
 <div class="small">전체 회차 이론 문항을 과목 › 단원으로 묶었습니다. 문제 줄을 누르면 그 자리에서 풀 수 있고, 정답은 풀기 전에는 보이지 않습니다.</div>
 <div id="toc" style="margin-top:12px"></div>
 </main>
 <script src="/static/quizcard.js"></script>
 <script src="/static/nav.js"></script>
+<script src="/static/ask.js"></script>
 <script>
 (async () => {
   const { data } = await api("/api/toc");

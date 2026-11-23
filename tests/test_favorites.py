@@ -52,7 +52,7 @@ def test_favorites_survive_question_bank_reload(conn):
 
 
 def test_page_has_recent_queries_that_tolerate_storage_failure():
-    page = (Path(__file__).resolve().parent.parent / "tutor" / "static" / "index.html").read_text(encoding="utf-8")
-    assert 'id="recent"' in page and "localStorage" in page
+    page = (Path(__file__).resolve().parent.parent / "tutor" / "static" / "ask.js").read_text(encoding="utf-8")   # 질문 패널 코드는 공용 ask.js
+    assert 'id: "recent"' in page and "localStorage" in page
     assert page.count("catch (e)") >= 2                              # 읽기·쓰기 모두 실패해도 화면은 계속 동작
     assert ".slice(0, 10)" in page                                   # 최근 질문은 10개까지
