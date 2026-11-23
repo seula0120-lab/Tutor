@@ -1,14 +1,15 @@
-// 상단 메뉴(모든 화면 공용). 5개 그룹(홈·배우기·풀기·복습·계획)과 오른쪽 계정 메뉴를 만들어 #topbar 자리에 넣는다.
+// 상단 메뉴(모든 화면 공용). 6개 그룹(홈·질문·배우기·풀기·복습·계획)과 오른쪽 계정 메뉴를 만들어 #topbar 자리에 넣는다.
 // quizcard.js(el·api)를 먼저 불러온 뒤 이 파일을 불러온다. 화면마다 따로 메뉴를 쓰지 않는다.
 // 드롭다운은 클릭/Enter/Space 로만 열린다(hover 로 열지 않음). Esc·바깥 클릭·다른 그룹 클릭·포커스가 밖으로 나가면 닫힌다.
 const NAV_GROUPS = [
   { key: "home", label: "홈", items: [{ label: "홈", href: "/" }] },
+  { key: "ask", label: "질문", items: [{ label: "질문", href: "/#ask" }] },
   { key: "learn", label: "배우기", items: [{ label: "공부", href: "/study" }, { label: "단어 주석", href: "/#words" }] },
   { key: "solve", label: "풀기", items: [{ label: "O/X", href: "/ox" }, { label: "기출 답안", href: "/#answers" }, { label: "모의고사", href: "/#mock" }, { label: "목차", href: "/toc" }] },
   { key: "review", label: "복습", items: [{ label: "오답노트", href: "/#notebook" }, { label: "주간 돌아보기", href: "/review-week" }] },
   { key: "plan", label: "계획", items: [{ label: "계획·캘린더", href: "/plan" }, { label: "문제 분석", href: "/#analysis" }] },
 ];
-const HASH_GROUP = { "": "home", "#ask": "home", "#words": "learn", "#answers": "solve", "#mock": "solve", "#notebook": "review", "#analysis": "plan" };
+const HASH_GROUP = { "": "home", "#ask": "ask", "#words": "learn", "#answers": "solve", "#mock": "solve", "#notebook": "review", "#analysis": "plan" };
 const PATH_GROUP = { "/study": "learn", "/study-changes": "learn", "/ox": "solve", "/toc": "solve", "/review-week": "review", "/plan": "plan", "/calendar": "plan" };
 
 // 지금 보고 있는 주소(경로+해시)가 속한 그룹 키. 어느 그룹에도 안 속하면 "" (/account, /start 등).
@@ -22,7 +23,7 @@ function navItemOf(path, hash) {
   const here = path === "/index.html" ? "/" : path.startsWith("/study/") ? "/study" : path;
   for (const g of NAV_GROUPS) for (const it of g.items) {
     const [p, h = ""] = it.href.split("#");
-    if (p === here && (p !== "/" || (h ? "#" + h : "") === (hash === "#ask" ? "" : hash))) return it;
+    if (p === here && (p !== "/" || (h ? "#" + h : "") === hash)) return it;
   }
   return null;
 }

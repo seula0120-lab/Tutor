@@ -36,9 +36,9 @@ def test_every_page_uses_the_shared_nav_script_and_no_own_menu():
     assert "calendar.html" not in PAGES.values() and "/calendar" in REDIRECTS
 
 
-def test_five_groups_and_their_items():
+def test_six_groups_and_their_items():
     groups = evaluate("NAV_GROUPS.map((g) => [g.label, g.items.map((i) => [i.label, i.href])])")
-    assert groups == [["홈", [["홈", "/"]]],
+    assert groups == [["홈", [["홈", "/"]]], ["질문", [["질문", "/#ask"]]],
                       ["배우기", [["공부", "/study"], ["단어 주석", "/#words"]]],
                       ["풀기", [["O/X", "/ox"], ["기출 답안", "/#answers"], ["모의고사", "/#mock"], ["목차", "/toc"]]],
                       ["복습", [["오답노트", "/#notebook"], ["주간 돌아보기", "/review-week"]]],
@@ -46,7 +46,7 @@ def test_five_groups_and_their_items():
 
 
 @pytest.mark.parametrize("path,hash_,group", [
-    ("/", "", "home"), ("/", "#ask", "home"), ("/", "#words", "learn"), ("/", "#answers", "solve"), ("/", "#mock", "solve"),
+    ("/", "", "home"), ("/", "#ask", "ask"), ("/", "#words", "learn"), ("/", "#answers", "solve"), ("/", "#mock", "solve"),
     ("/", "#notebook", "review"), ("/", "#analysis", "plan"), ("/study", "", "learn"), ("/study/자본", "", "learn"), ("/study-changes", "", "learn"),
     ("/ox", "", "solve"), ("/toc", "", "solve"), ("/review-week", "", "review"), ("/plan", "", "plan"), ("/plan", "#calendar", "plan"),
     ("/account", "", ""), ("/admin", "", ""), ("/start", "", ""), ("/glossary-review", "", "")])
