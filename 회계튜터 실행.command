@@ -5,6 +5,12 @@
 PROJECT_DIR="${0:A:h}"
 cd "$PROJECT_DIR" || exit 1
 
+# API 키(선택): 프로젝트 폴더의 .env 에 ANTHROPIC_API_KEY=... 한 줄이 있으면 읽는다(Git 제외 파일, 키 값은 출력하지 않음).
+if [[ -f "$PROJECT_DIR/.env" ]]; then
+  set -a; source "$PROJECT_DIR/.env"; set +a
+  [[ -n "$ANTHROPIC_API_KEY" ]] && echo "API 키를 읽었습니다(AI 설명 켜짐, 호출 비용 발생)."
+fi
+
 PY="$PROJECT_DIR/.venv/bin/python"
 if [[ ! -x "$PY" ]]; then
   echo "가상환경이 없습니다. README.md 의 '설치'를 먼저 하세요."
